@@ -64,6 +64,14 @@
         $(document).ready(function () {
             rotorhazard.show_messages = false;
 
+            // Load border and glow settings from localStorage
+            var borderThickness = localStorage.getItem('ddr_border_thickness') || '4';
+            var glowIntensity = localStorage.getItem('ddr_glow_intensity') || '15';
+            var animationSpeed = localStorage.getItem('ddr_animation_speed') || '2';
+            $('html').css('--border_thickness', borderThickness + 'px');
+            $('html').css('--glow_intensity', glowIntensity + 'px');
+            $('html').css('--animation_speed', animationSpeed + 's');
+
             socket.on('language', default_handler['language']);
 
             socket.on('current_heat', function (msg) {
@@ -78,6 +86,16 @@
                         $('html').css('--position_background_color', contrast_color);
                         $('html').css('--fast_lap_color', color);
                         $('html').css('--contrast_fast_lap_color', contrast_color);
+
+                        // Check for secondary color and apply dual-color animation
+                        var secondaryColors = JSON.parse(localStorage.getItem('ddr_pilot_secondary_colors') || '{}');
+                        if (pilot_id && secondaryColors[pilot_id]) {
+                            var secondaryColor = secondaryColors[pilot_id];
+                            $('html').css('--pilot_color_secondary', secondaryColor);
+                            $('#node_avatar').css('animation', 'pulse-glow-dual ' + animationSpeed + 's ease-in-out infinite');
+                        } else {
+                            $('#node_avatar').css('animation', 'pulse-glow ' + animationSpeed + 's ease-in-out infinite');
+                        }
                     } else {
                         $('html').css('--pilot_color', 'hsl(var(--hue_0), var(--sat_0), var(--lum_0_low))');
                         $('html').css('--contrast_pilot_color', 'var(--contrast_0_low)');
@@ -85,6 +103,7 @@
                         $('html').css('--position_foreground_color', 'var(--contrast_1_high)');
                         $('html').css('--fast_lap_color', 'hsl(var(--hue_1), var(--sat_1), var(--lum_1_high))');
                         $('html').css('--contrast_fast_lap_color', 'var(--contrast_1_high)');
+                        $('#node_avatar').css('animation', 'pulse-glow ' + animationSpeed + 's ease-in-out infinite');
                     }
                 }
             });
@@ -159,9 +178,6 @@
                             //tr.addClass('after-time-expired');
                         }
                         tr.appendTo('#pilot_current_laps');
-
-                        // count display_laps
-                        console.log(display_laps.length);
 
                         if (node_index.finished_flag) {
                             $('#pilot_current_lap_text').html('FINISHED');

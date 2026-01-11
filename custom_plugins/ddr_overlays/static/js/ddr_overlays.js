@@ -176,20 +176,91 @@ function build_nextup(leaderboard, display_type, meta, ddr_pilot_data, ddr_frequ
         meta.primary_leaderboard = null;
     }
 
-    for (var i in leaderboard) {
-        let pilot_name = leaderboard[i].callsign;
+    // Sort leaderboard by node/seat number ONLY for Next Up (show_position=false)
+    // For Last Heat (show_position=true), keep original order (sorted by race results)
+    var sortedLeaderboard;
+    if (!show_position) {
+        // Next Up: Sort by seat/node number
+        sortedLeaderboard = leaderboard.slice().sort(function(a, b) {
+            // Handle undefined nodes by placing them at the end
+            if (typeof a.node === 'undefined') return 1;
+            if (typeof b.node === 'undefined') return -1;
+            return a.node - b.node;
+        });
+    } else {
+        // Last Heat: Keep original order (race results)
+        sortedLeaderboard = leaderboard;
+    }
 
-        // Add channel info to pilot name if frequency data is available
-        if (typeof ddr_frequency_data !== 'undefined' && ddr_frequency_data && typeof leaderboard[i].node !== 'undefined') {
-            let node_index = leaderboard[i].node;
-            if (ddr_frequency_data[node_index] && ddr_frequency_data[node_index].band && ddr_frequency_data[node_index].channel) {
-                let channel_label = ddr_frequency_data[node_index].band + ddr_frequency_data[node_index].channel;
-                pilot_name += ' [' + channel_label + ']';
+    for (var i in sortedLeaderboard) {
+        let pilot_name = sortedLeaderboard[i].callsign;
+        let channel_html = '';
+
+        // Get pilot color (used for both channel label and avatar border)
+        let pilot_color = '#b9b9b9'; // default gray
+        let pilot_secondary_color = null;
+        let current_pilot_id = sortedLeaderboard[i].pilot_id;
+
+        if (ddr_pilot_data && Array.isArray(ddr_pilot_data)) {
+            let pilot = ddr_pilot_data.find(p => p.pilot_id === current_pilot_id);
+            if (pilot && pilot.color) {
+                pilot_color = pilot.color;
+
+                // Check for secondary color
+                let secondaryColors = JSON.parse(localStorage.getItem('ddr_pilot_secondary_colors') || '{}');
+                if (secondaryColors[current_pilot_id]) {
+                    pilot_secondary_color = secondaryColors[current_pilot_id];
+                }
             }
         }
 
-        let flagImg = getFlagURL(leaderboard[i].pilot_id, ddr_pilot_data);
-        let pilotImg = getPilotImgURL(leaderboard[i]);
+        // Add channel info to pilot name if frequency data is available AND setting is enabled
+        var showChannel = localStorage.getItem('ddr_show_channel') === 'true';
+        if (showChannel && typeof ddr_frequency_data !== 'undefined' && ddr_frequency_data && typeof sortedLeaderboard[i].node !== 'undefined') {
+            let node_index = sortedLeaderboard[i].node;
+            if (ddr_frequency_data[node_index] && ddr_frequency_data[node_index].band && ddr_frequency_data[node_index].channel) {
+                let channel_label = ddr_frequency_data[node_index].band + ddr_frequency_data[node_index].channel;
+
+                // Create styled channel label (smaller font)
+                channel_html = ' <span style="font-size: 0.85em;">[' + channel_label + ']</span>';
+            }
+        }
+
+        let flagImg = getFlagURL(sortedLeaderboard[i].pilot_id, ddr_pilot_data);
+        let pilotImg = getPilotImgURL(sortedLeaderboard[i]);
+
+        // Get border and glow settings from localStorage
+        let borderThickness = localStorage.getItem('ddr_border_thickness') || '4';
+        let glowIntensity = localStorage.getItem('ddr_glow_intensity') || '15';
+        let animationSpeed = localStorage.getItem('ddr_animation_speed') || '2';
+
+        // Create avatar border style with pilot's color and CSS variables for animation
+        let avatarStyle, avatarClass;
+
+        if (pilot_secondary_color) {
+            // Dual-color animation
+            let baseBoxShadow = '0 0 ' + glowIntensity + 'px ' + pilot_color;
+            let pulseBoxShadowSecondary = '0 0 ' + (glowIntensity * 1.8) + 'px ' + pilot_secondary_color;
+
+            avatarStyle = 'border: ' + borderThickness + 'px solid ' + pilot_color + '; ' +
+                          'box-shadow: ' + baseBoxShadow + '; ' +
+                          '--pilot-primary-color: ' + pilot_color + '; ' +
+                          '--pilot-secondary-color: ' + pilot_secondary_color + '; ' +
+                          '--avatar-border-style: ' + baseBoxShadow + '; ' +
+                          '--avatar-border-style-pulse-secondary: ' + pulseBoxShadowSecondary + '; ' +
+                          'animation-duration: ' + animationSpeed + 's;';
+            avatarClass = 'pulse-avatar-glow-dual';
+        } else {
+            // Single-color animation
+            let baseBoxShadow = '0 0 ' + glowIntensity + 'px ' + pilot_color;
+            let pulseBoxShadow = '0 0 ' + (glowIntensity * 1.8) + 'px ' + pilot_color;
+            avatarStyle = 'border: ' + borderThickness + 'px solid ' + pilot_color + '; ' +
+                          'box-shadow: ' + baseBoxShadow + '; ' +
+                          '--avatar-border-style: ' + baseBoxShadow + '; ' +
+                          '--avatar-border-style-pulse: ' + pulseBoxShadow + '; ' +
+                          'animation-duration: ' + animationSpeed + 's;';
+            avatarClass = 'pulse-avatar-glow';
+        }
 
         let html = '<div class="nextup_pilot">';
         if (show_position) {
@@ -200,7 +271,7 @@ function build_nextup(leaderboard, display_type, meta, ddr_pilot_data, ddr_frequ
             // var fastest_lap = leaderboard[i].fastest_lap;
             // var consecutives = leaderboard[i].consecutives;
         }
-        html += '<div class="nextup_pilot_avatar"><div class="nextup_pilot_avatar_mask"><img src="' + pilotImg + '" alt="Avatar"></div></div><div class="nextup_pilot_flag"><div class="nextup_pilot_flag_mask"><img src="' + flagImg + '"></div></div><div class="nextup_pilot_name">' + pilot_name + '</div></div>';
+        html += '<div class="nextup_pilot_avatar"><div class="nextup_pilot_avatar_mask ' + avatarClass + '" style="' + avatarStyle + '"><img src="' + pilotImg + '" alt="Avatar"></div></div><div class="nextup_pilot_flag"><div class="nextup_pilot_flag_mask"><img src="' + flagImg + '"></div></div><div class="nextup_pilot_name">' + pilot_name + channel_html + '</div></div>';
 
         $('#nextup_pilot_box').append(html);
     }

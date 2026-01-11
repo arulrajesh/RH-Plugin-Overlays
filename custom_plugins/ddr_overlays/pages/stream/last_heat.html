@@ -64,6 +64,7 @@
     var ddr_heat_data;
     var ddr_class_data;
     var ddr_frequency_data;
+    var ddr_last_leaderboard_data; // Store last leaderboard to rebuild when frequency data arrives
 
     function race_kickoff(msg) {
         rotorhazard.timer.stopAll();
@@ -110,6 +111,19 @@
 
         socket.on('frequency_data', function (msg) {
             ddr_frequency_data = msg.fdata;
+
+            // Rebuild the display if we have leaderboard data waiting
+            if (ddr_last_leaderboard_data) {
+                $('#nextup_pilot_box').empty();
+                build_nextup(
+                    ddr_last_leaderboard_data.leaderboard,
+                    'current',
+                    ddr_last_leaderboard_data.meta,
+                    ddr_pilot_data,
+                    ddr_frequency_data,
+                    true  // show_position = true for last_heat
+                );
+            }
         });
 
         socket.on('race_status', default_handler['race_status']);
@@ -172,6 +186,13 @@
                 $('#nextup_pilot_box').empty();
 
                 var leaderboard_type = race.leaderboard.meta.primary_leaderboard;
+
+                // Store leaderboard data for later use
+                ddr_last_leaderboard_data = {
+                    leaderboard: race.leaderboard[leaderboard_type],
+                    meta: race.leaderboard.meta
+                };
+
                 build_nextup(race.leaderboard[leaderboard_type], 'current', race.leaderboard.meta, ddr_pilot_data, ddr_frequency_data, true);
 
                 var bracket_format_info = bracket_formats[race_bracket_type];

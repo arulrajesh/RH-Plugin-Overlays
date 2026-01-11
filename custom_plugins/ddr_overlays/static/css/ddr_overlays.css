@@ -4,6 +4,66 @@ h1, h2, h3, h4, h5 {
     font-family: teko, Arial, Helvetica, sans-serif;
 }
 
+/* Pulsating glow animation for node overlays (single color) */
+@keyframes pulse-glow {
+    0%, 100% {
+        box-shadow: 0 0 var(--glow_intensity, 15px) var(--pilot_color, rgba(255, 255, 255, 0.3));
+    }
+    50% {
+        box-shadow: 0 0 calc(var(--glow_intensity, 15px) * 1.8) var(--pilot_color, rgba(255, 255, 255, 0.6));
+    }
+}
+
+/* Dual-color blink animation for node overlays with secondary color */
+@keyframes pulse-glow-dual {
+    0%, 45% {
+        border-color: var(--pilot_color, #b9b9b9);
+        box-shadow: 0 0 var(--glow_intensity, 15px) var(--pilot_color, rgba(255, 255, 255, 0.3));
+    }
+    50%, 95% {
+        border-color: var(--pilot_color_secondary, #b9b9b9);
+        box-shadow: 0 0 calc(var(--glow_intensity, 15px) * 1.8) var(--pilot_color_secondary, rgba(255, 255, 255, 0.6));
+    }
+    100% {
+        border-color: var(--pilot_color, #b9b9b9);
+        box-shadow: 0 0 var(--glow_intensity, 15px) var(--pilot_color, rgba(255, 255, 255, 0.3));
+    }
+}
+
+/* Pulsating effect for next_up/last_heat avatars with dynamic colors (single color) */
+.pulse-avatar-glow {
+    animation: pulse-nextup 2s ease-in-out infinite;
+}
+
+@keyframes pulse-nextup {
+    0%, 100% {
+        box-shadow: var(--avatar-border-style);
+    }
+    50% {
+        box-shadow: var(--avatar-border-style-pulse);
+    }
+}
+
+/* Dual-color blink effect for next_up/last_heat avatars */
+.pulse-avatar-glow-dual {
+    animation: pulse-nextup-dual 2s ease-in-out infinite;
+}
+
+@keyframes pulse-nextup-dual {
+    0%, 45% {
+        border-color: var(--pilot-primary-color);
+        box-shadow: var(--avatar-border-style);
+    }
+    50%, 95% {
+        border-color: var(--pilot-secondary-color);
+        box-shadow: var(--avatar-border-style-pulse-secondary);
+    }
+    100% {
+        border-color: var(--pilot-primary-color);
+        box-shadow: var(--avatar-border-style);
+    }
+}
+
 
 
 /* DDR NEXT UP / LAST HEAT */
@@ -174,6 +234,8 @@ h1, h2, h3, h4, h5 {
     left: 12px;
     z-index: 999;
     overflow: hidden;
+    border: var(--border_thickness, 4px) solid var(--pilot_color, #b9b9b9);
+    animation: pulse-glow var(--animation_speed, 2s) ease-in-out infinite;
 }
 
 #ddr_node #node_avatar img {

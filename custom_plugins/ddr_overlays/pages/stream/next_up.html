@@ -64,6 +64,7 @@
     var ddr_heat_data;
     var ddr_class_data;
     var ddr_frequency_data;
+    var ddr_last_leaderboard_data; // Store last leaderboard to rebuild when frequency data arrives
 
     function race_kickoff(msg) {
         rotorhazard.timer.stopAll();
@@ -113,6 +114,18 @@
 
         socket.on('frequency_data', function (msg) {
             ddr_frequency_data = msg.fdata;
+
+            // Rebuild the display if we have leaderboard data waiting
+            if (ddr_last_leaderboard_data) {
+                $('#nextup_pilot_box').empty();
+                build_nextup(
+                    ddr_last_leaderboard_data.leaderboard,
+                    'current',
+                    ddr_last_leaderboard_data.meta,
+                    ddr_pilot_data,
+                    ddr_frequency_data
+                );
+            }
         });
 
         socket.on('heartbeat', default_handler['heartbeat']);
@@ -120,29 +133,15 @@
         socket.on('leaderboard', function (msg) {
             var race = msg.current;
 
-            // DEBUG: Log leaderboard data to console
-            console.log('=== LEADERBOARD DATA RECEIVED ===');
-            console.log('Full msg:', msg);
-            console.log('Race data:', race);
-
             leaderboard_type = race.leaderboard.meta.primary_leaderboard;
-            console.log('Leaderboard type:', leaderboard_type);
-
-            var pilots = race.leaderboard[leaderboard_type];
-            console.log('Number of pilots:', pilots.length);
-
-            // Log each pilot's properties
-            pilots.forEach(function(pilot, i) {
-                console.log(`Pilot ${i} [${pilot.callsign}]:`, {
-                    node: pilot.node,
-                    pilot_id: pilot.pilot_id,
-                    position: pilot.position,
-                    all_keys: Object.keys(pilot)
-                });
-            });
-            console.log('=================================');
 
             $('.curr_heat_title').html(race.displayname);
+
+            // Store leaderboard data for later use
+            ddr_last_leaderboard_data = {
+                leaderboard: race.leaderboard[leaderboard_type],
+                meta: race.leaderboard.meta
+            };
 
             $('#nextup_pilot_box').empty();
             build_nextup(race.leaderboard[leaderboard_type], 'current', race.leaderboard.meta, ddr_pilot_data, ddr_frequency_data);
