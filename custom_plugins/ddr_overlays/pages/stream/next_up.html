@@ -133,10 +133,37 @@
         socket.on('leaderboard', function (msg) {
             var race = msg.current;
 
+<<<<<<< HEAD
             leaderboard_type = race.leaderboard.meta.primary_leaderboard;
 
             $('.curr_heat_title').html(race.displayname);
 
+=======
+            // DEBUG: Log leaderboard data to console
+            console.log('=== LEADERBOARD DATA RECEIVED ===');
+            console.log('Full msg:', msg);
+            console.log('Race data:', race);
+
+            leaderboard_type = race.leaderboard.meta.primary_leaderboard;
+            console.log('Leaderboard type:', leaderboard_type);
+
+            var pilots = race.leaderboard[leaderboard_type];
+            console.log('Number of pilots:', pilots.length);
+
+            // Log each pilot's properties
+            pilots.forEach(function(pilot, i) {
+                console.log(`Pilot ${i} [${pilot.callsign}]:`, {
+                    node: pilot.node,
+                    pilot_id: pilot.pilot_id,
+                    position: pilot.position,
+                    all_keys: Object.keys(pilot)
+                });
+            });
+            console.log('=================================');
+
+            $('.curr_heat_title').html(race.displayname);
+
+>>>>>>> 9bfba9edab816457ad9e98009052f3676767d386
             // Store leaderboard data for later use
             ddr_last_leaderboard_data = {
                 leaderboard: race.leaderboard[leaderboard_type],

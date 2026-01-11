@@ -176,6 +176,7 @@ function build_nextup(leaderboard, display_type, meta, ddr_pilot_data, ddr_frequ
         meta.primary_leaderboard = null;
     }
 
+<<<<<<< HEAD
     // Sort leaderboard by node/seat number ONLY for Next Up (show_position=false)
     // For Last Heat (show_position=true), keep original order (sorted by race results)
     var sortedLeaderboard;
@@ -261,6 +262,23 @@ function build_nextup(leaderboard, display_type, meta, ddr_pilot_data, ddr_frequ
                           'animation-duration: ' + animationSpeed + 's;';
             avatarClass = 'pulse-avatar-glow';
         }
+=======
+    for (var i in leaderboard) {
+        let pilot_name = leaderboard[i].callsign;
+
+        // Add channel info to pilot name if frequency data is available AND setting is enabled
+        var showChannel = localStorage.getItem('ddr_show_channel') === 'true';
+        if (showChannel && typeof ddr_frequency_data !== 'undefined' && ddr_frequency_data && typeof leaderboard[i].node !== 'undefined') {
+            let node_index = leaderboard[i].node;
+            if (ddr_frequency_data[node_index] && ddr_frequency_data[node_index].band && ddr_frequency_data[node_index].channel) {
+                let channel_label = ddr_frequency_data[node_index].band + ddr_frequency_data[node_index].channel;
+                pilot_name += ' [' + channel_label + ']';
+            }
+        }
+
+        let flagImg = getFlagURL(leaderboard[i].pilot_id, ddr_pilot_data);
+        let pilotImg = getPilotImgURL(leaderboard[i]);
+>>>>>>> 9bfba9edab816457ad9e98009052f3676767d386
 
         let html = '<div class="nextup_pilot">';
         if (show_position) {

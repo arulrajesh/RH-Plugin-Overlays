@@ -42,6 +42,7 @@
                 localStorage.setItem('ddr_show_channel', $(this).is(':checked'));
             });
 
+<<<<<<< HEAD
             // Load border thickness and glow intensity from localStorage
             var borderThickness = localStorage.getItem('ddr_border_thickness');
             if (borderThickness !== null) {
@@ -126,6 +127,8 @@
                 });
             }
 
+=======
+>>>>>>> 9bfba9edab816457ad9e98009052f3676767d386
             socket.on('language', function (msg) {
                 if (msg.language) {
                     rotorhazard.interface_language = msg.language;
@@ -458,6 +461,7 @@
                     When enabled, pilot names will display with their channel (e.g., "Pilot [R6]")
                 </p>
             </div>
+<<<<<<< HEAD
 
             <div style="margin: 20px 0;">
                 <h5 style="margin-bottom: 15px;">Avatar Border Settings</h5>
@@ -500,6 +504,8 @@
                     <!-- Pilot color pickers will be dynamically generated here -->
                 </div>
             </div>
+=======
+>>>>>>> 9bfba9edab816457ad9e98009052f3676767d386
         </div>
 
     <style>
