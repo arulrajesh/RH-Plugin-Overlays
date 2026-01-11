@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RotorHazard Socket Data Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }
+        h1 {
+            color: #4ec9b0;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #252526;
+            border-left: 3px solid #007acc;
+        }
+        .data {
+            background: #1e1e1e;
+            padding: 10px;
+            border: 1px solid #3e3e42;
+            margin: 10px 0;
+            overflow-x: auto;
+        }
+        pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .pilot {
+            margin: 5px 0;
+            padding: 8px;
+            background: #2d2d30;
+            border-left: 2px solid #569cd6;
+        }
+        .key {
+            color: #9cdcfe;
+        }
+        .value {
+            color: #ce9178;
+        }
+        .number {
+            color: #b5cea8;
+        }
+        button {
+            background: #0e639c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #1177bb;
+        }
+        #status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .connected {
+            background: #1a3d1a;
+            border: 1px solid #4ec9b0;
+            color: #4ec9b0;
+        }
+        .disconnected {
+            background: #3d1a1a;
+            border: 1px solid #f48771;
+            color: #f48771;
+        }
+    </style>
+</head>
+<body>
+    <h1>RotorHazard Socket Data Test</h1>
+
+    <div id="status" class="disconnected">Status: Not Connected</div>
+
+    <button onclick="connectSocket()">Connect to RotorHazard</button>
+    <button onclick="requestData()">Request Data</button>
+    <button onclick="clearOutput()">Clear Output</button>
+    <button onclick="exportToJSON()">Export All Data to JSON</button>
+
+    <div class="section">
+        <h2>Instructions:</h2>
+        <ol>
+            <li>Click "Connect to RotorHazard" (auto-connects on page load)</li>
+            <li>Click "Request Data" or start/stop a race in RotorHazard</li>
+            <li>Watch the data appear below - look for the "NODE (Channel)" property</li>
+            <li>Click "Export All Data to JSON" to download all captured data as a JSON file</li>
+            <li>The JSON file will include all leaderboard, heat, pilot, and race status events</li>
+        </ol>
+    </div>
+
+    <div id="output"></div>
+
+    <!-- Load Socket.IO from your RotorHazard server -->
+    <script src="http://pinkkaju.local:5000/static/socket.io-4.6.1/socket.io.min.js"></script>
+
+    <script>
+        var socket;
+        var output = document.getElementById('output');
+        var statusDiv = document.getElementById('status');
+
+        // Store all received data for export
+        var capturedData = {
+            leaderboard_events: [],
+            heat_data_events: [],
+            pilot_data_events: [],
+            race_status_events: [],
+            frequency_data_events: [],
+            timestamp: new Date().toISOString()
+        };
+
+        function addOutput(title, content, type = 'data') {
+            var section = document.createElement('div');
+            section.className = 'section';
+            section.innerHTML = '<h3>' + title + '</h3><div class="' + type + '"><pre>' + content + '</pre></div>';
+            output.insertBefore(section, output.firstChild);
+        }
+
+        function exportToJSON() {
+            var dataStr = JSON.stringify(capturedData, null, 2);
+            var dataBlob = new Blob([dataStr], {type: 'application/json'});
+
+            var link = document.createElement('a');
+            link.href = URL.createObjectURL(dataBlob);
+            link.download = 'rotorhazard_socket_data_' + Date.now() + '.json';
+            link.click();
+
+            addOutput('Export', 'Exported ' +
+                capturedData.leaderboard_events.length + ' leaderboard events, ' +
+                capturedData.heat_data_events.length + ' heat data events, ' +
+                capturedData.pilot_data_events.length + ' pilot data events, ' +
+                capturedData.race_status_events.length + ' race status events, ' +
+                capturedData.frequency_data_events.length + ' frequency data events to JSON file');
+        }
+
+        function updateStatus(message, connected) {
+            statusDiv.textContent = 'Status: ' + message;
+            statusDiv.className = connected ? 'connected' : 'disconnected';
+        }
+
+        function clearOutput() {
+            output.innerHTML = '';
+        }
+
+        function connectSocket() {
+            if (socket) {
+                addOutput('Info', 'Already connected!');
+                return;
+            }
+
+            updateStatus('Connecting...', false);
+            socket = io.connect('http://pinkkaju.local:5000');
+
+            socket.on('connect', function() {
+                updateStatus('Connected to RotorHazard!', true);
+                addOutput('Connection', 'Successfully connected to http://pinkkaju.local:5000');
+                requestData();
+            });
+
+            socket.on('disconnect', function() {
+                updateStatus('Disconnected', false);
+                addOutput('Connection', 'Disconnected from server');
+            });
+
+            // Listen for leaderboard data
+            socket.on('leaderboard', function(msg) {
+                // Capture data for export
+                capturedData.leaderboard_events.push({
+                    timestamp: new Date().toISOString(),
+                    data: msg
+                });
+
+                var output = '=== LEADERBOARD EVENT ===\n\n';
+
+                try {
+                    var race = msg.current;
+                    output += 'Heat: ' + race.displayname + '\n\n';
+
+                    if (race.leaderboard && race.leaderboard.meta) {
+                        var leaderboard_type = race.leaderboard.meta.primary_leaderboard;
+                        output += 'Leaderboard Type: ' + leaderboard_type + '\n\n';
+
+                        var pilots = race.leaderboard[leaderboard_type];
+                        output += 'Number of Pilots: ' + pilots.length + '\n\n';
+
+                        output += '--- PILOT DATA ---\n';
+                        pilots.forEach(function(pilot, i) {
+                            output += '\nPilot ' + i + ':\n';
+                            output += '  Callsign: ' + pilot.callsign + '\n';
+                            output += '  NODE (Channel): ' + pilot.node + ' ← THIS IS THE CHANNEL!\n';
+                            output += '  Pilot ID: ' + pilot.pilot_id + '\n';
+                            output += '  Position: ' + pilot.position + '\n';
+                            output += '  Fastest Lap: ' + pilot.fastest_lap + '\n';
+                            output += '  Total Time: ' + pilot.total_time + '\n';
+                            output += '\n  All Properties: ' + Object.keys(pilot).join(', ') + '\n';
+                        });
+                    }
+
+                    output += '\n\n--- FULL JSON DATA ---\n';
+                    output += JSON.stringify(msg, null, 2);
+
+                } catch (e) {
+                    output += 'Error parsing data: ' + e.message + '\n\n';
+                    output += JSON.stringify(msg, null, 2);
+                }
+
+                addOutput('Leaderboard Data Received', output);
+            });
+
+            // Listen for heat data
+            socket.on('heat_data', function(msg) {
+                // Capture data for export
+                capturedData.heat_data_events.push({
+                    timestamp: new Date().toISOString(),
+                    data: msg
+                });
+
+                var output = '=== HEAT DATA EVENT ===\n\n';
+
+                try {
+                    if (msg.heats) {
+                        output += 'Number of Heats: ' + msg.heats.length + '\n\n';
+
+                        if (msg.heats.length > 0) {
+                            var heat = msg.heats[0];
+                            output += 'First Heat ID: ' + heat.id + '\n';
+                            output += 'Heat Name: ' + heat.name + '\n';
+                            output += 'Class ID: ' + heat.class_id + '\n';
+
+                            if (heat.slots) {
+                                output += '\n--- SLOT DATA ---\n';
+                                heat.slots.forEach(function(slot, i) {
+                                    output += '\nSlot ' + i + ':\n';
+                                    output += '  Node Index: ' + slot.node_index + '\n';
+                                    output += '  Pilot ID: ' + slot.pilot_id + '\n';
+                                    output += '  Method: ' + slot.method + '\n';
+                                });
+                            }
+                        }
+                    }
+
+                    output += '\n\n--- FULL JSON DATA ---\n';
+                    output += JSON.stringify(msg, null, 2);
+
+                } catch (e) {
+                    output += 'Error parsing data: ' + e.message + '\n\n';
+                    output += JSON.stringify(msg, null, 2);
+                }
+
+                addOutput('Heat Data Received', output);
+            });
+
+            // Listen for pilot data
+            socket.on('pilot_data', function(msg) {
+                // Capture data for export
+                capturedData.pilot_data_events.push({
+                    timestamp: new Date().toISOString(),
+                    data: msg
+                });
+
+                var output = '=== PILOT DATA EVENT ===\n\n';
+
+                try {
+                    if (msg.pilots) {
+                        output += 'Number of Pilots: ' + msg.pilots.length + '\n\n';
+
+                        msg.pilots.forEach(function(pilot, i) {
+                            output += '\nPilot ' + i + ':\n';
+                            output += '  Callsign: ' + pilot.callsign + '\n';
+                            output += '  Name: ' + pilot.name + '\n';
+                            output += '  Pilot ID: ' + pilot.pilot_id + '\n';
+                            output += '  All Properties: ' + Object.keys(pilot).join(', ') + '\n';
+                        });
+                    }
+
+                    output += '\n\n--- FULL JSON DATA ---\n';
+                    output += JSON.stringify(msg, null, 2);
+
+                } catch (e) {
+                    output += 'Error parsing data: ' + e.message;
+                }
+
+                addOutput('Pilot Data Received', output);
+            });
+
+            // Listen for race status
+            socket.on('race_status', function(msg) {
+                // Capture data for export
+                capturedData.race_status_events.push({
+                    timestamp: new Date().toISOString(),
+                    data: msg
+                });
+
+                addOutput('Race Status', 'Status Code: ' + msg.status + '\n\nFull Data:\n' + JSON.stringify(msg, null, 2));
+            });
+
+            // Listen for frequency data
+            socket.on('frequency_data', function(msg) {
+                // Capture data for export
+                capturedData.frequency_data_events.push({
+                    timestamp: new Date().toISOString(),
+                    data: msg
+                });
+
+                var output = '=== FREQUENCY DATA EVENT ===\n\n';
+
+                try {
+                    if (msg.frequency) {
+                        output += 'Number of Nodes: ' + msg.frequency.length + '\n\n';
+
+                        msg.frequency.forEach(function(node, i) {
+                            output += '\nNode ' + i + ':\n';
+                            output += '  Band: ' + node.band + '\n';
+                            output += '  Channel: ' + node.channel + '\n';
+                            output += '  Frequency: ' + node.frequency + ' MHz\n';
+                            output += '  Band/Channel Label: ' + node.band + node.channel + '\n';
+                            output += '  All Properties: ' + Object.keys(node).join(', ') + '\n';
+                        });
+                    }
+
+                    output += '\n\n--- FULL JSON DATA ---\n';
+                    output += JSON.stringify(msg, null, 2);
+
+                } catch (e) {
+                    output += 'Error parsing data: ' + e.message + '\n\n';
+                    output += JSON.stringify(msg, null, 2);
+                }
+
+                addOutput('Frequency Data Received', output);
+            });
+        }
+
+        function requestData() {
+            if (!socket) {
+                alert('Please connect first!');
+                return;
+            }
+
+            addOutput('Request', 'Requesting data from server...');
+            socket.emit('load_data', {
+                'load_types': ['leaderboard', 'heat_data', 'pilot_data', 'race_status', 'frequency_data']
+            });
+        }
+
+        // Auto-connect on page load
+        window.onload = function() {
+            setTimeout(connectSocket, 500);
+        };
+    </script>
+</body>
+</html>

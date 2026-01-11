@@ -164,7 +164,7 @@ function get_number_of_pilots_from_format(bracket_type) {
 
 
 /* HTML generators */
-function build_nextup(leaderboard, display_type, meta, ddr_pilot_data, show_position=false) {
+function build_nextup(leaderboard, display_type, meta, ddr_pilot_data, ddr_frequency_data, show_position=false) {
     if (typeof(display_type) === 'undefined') {
         var display_type = 'by_race_time';
     }
@@ -177,7 +177,17 @@ function build_nextup(leaderboard, display_type, meta, ddr_pilot_data, show_posi
     }
 
     for (var i in leaderboard) {
-        let pilot_name = leaderboard[i].callsign;       
+        let pilot_name = leaderboard[i].callsign;
+
+        // Add channel info to pilot name if frequency data is available
+        if (typeof ddr_frequency_data !== 'undefined' && ddr_frequency_data && typeof leaderboard[i].node !== 'undefined') {
+            let node_index = leaderboard[i].node;
+            if (ddr_frequency_data[node_index] && ddr_frequency_data[node_index].band && ddr_frequency_data[node_index].channel) {
+                let channel_label = ddr_frequency_data[node_index].band + ddr_frequency_data[node_index].channel;
+                pilot_name += ' [' + channel_label + ']';
+            }
+        }
+
         let flagImg = getFlagURL(leaderboard[i].pilot_id, ddr_pilot_data);
         let pilotImg = getPilotImgURL(leaderboard[i]);
 
