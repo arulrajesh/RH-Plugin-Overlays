@@ -176,7 +176,6 @@ function build_nextup(leaderboard, display_type, meta, ddr_pilot_data, ddr_frequ
         meta.primary_leaderboard = null;
     }
 
-<<<<<<< HEAD
     // Sort leaderboard by node/seat number ONLY for Next Up (show_position=false)
     // For Last Heat (show_position=true), keep original order (sorted by race results)
     var sortedLeaderboard;
@@ -207,16 +206,33 @@ function build_nextup(leaderboard, display_type, meta, ddr_pilot_data, ddr_frequ
             if (pilot && pilot.color) {
                 pilot_color = pilot.color;
 
-                // Check for secondary color
-                let secondaryColors = JSON.parse(localStorage.getItem('ddr_pilot_secondary_colors') || '{}');
+                // Check for secondary color from server-side settings
+                let secondaryColors = DDR_Settings.get('pilot_secondary_colors', {});
+
+                // Debug logging for OBS troubleshooting
+                if (i === 0) {
+                    console.log('[DDR Overlays] Secondary colors from server:', JSON.stringify(secondaryColors));
+                    console.log('[DDR Overlays] Looking for pilot ID:', current_pilot_id);
+                }
+
                 if (secondaryColors[current_pilot_id]) {
                     pilot_secondary_color = secondaryColors[current_pilot_id];
+                    if (i === 0) {
+                        console.log('[DDR Overlays] Found secondary color:', pilot_secondary_color);
+                    }
                 }
             }
         }
 
         // Add channel info to pilot name if frequency data is available AND setting is enabled
-        var showChannel = localStorage.getItem('ddr_show_channel') === 'true';
+        var showChannel = DDR_Settings.get('show_channel', false);
+
+        // Debug logging for OBS troubleshooting
+        if (i === 0) {
+            console.log('[DDR Overlays] Show channel setting:', showChannel);
+            console.log('[DDR Overlays] Frequency data available:', typeof ddr_frequency_data !== 'undefined' && ddr_frequency_data);
+        }
+
         if (showChannel && typeof ddr_frequency_data !== 'undefined' && ddr_frequency_data && typeof sortedLeaderboard[i].node !== 'undefined') {
             let node_index = sortedLeaderboard[i].node;
             if (ddr_frequency_data[node_index] && ddr_frequency_data[node_index].band && ddr_frequency_data[node_index].channel) {
@@ -230,55 +246,65 @@ function build_nextup(leaderboard, display_type, meta, ddr_pilot_data, ddr_frequ
         let flagImg = getFlagURL(sortedLeaderboard[i].pilot_id, ddr_pilot_data);
         let pilotImg = getPilotImgURL(sortedLeaderboard[i]);
 
-        // Get border and glow settings from localStorage
-        let borderThickness = localStorage.getItem('ddr_border_thickness') || '4';
-        let glowIntensity = localStorage.getItem('ddr_glow_intensity') || '15';
-        let animationSpeed = localStorage.getItem('ddr_animation_speed') || '2';
+        // Get border and glow settings from server
+        let borderThickness = DDR_Settings.get('border_thickness', '4');
+        let glowIntensity = DDR_Settings.get('glow_intensity', '15');
+        let animationSpeed = DDR_Settings.get('animation_speed', '2');
 
-        // Create avatar border style with pilot's color and CSS variables for animation
-        let avatarStyle, avatarClass;
+        // Create unique animation name for this pilot
+        let animationName = 'pilot-glow-' + current_pilot_id + '-' + i;
 
+        // Generate keyframes dynamically with actual color values (for OBS compatibility)
+        let keyframesStyle = '';
         if (pilot_secondary_color) {
+            // Debug logging for dual-color animation
+            if (i === 0) {
+                console.log('[DDR Overlays] Generating dual-color animation for pilot:', current_pilot_id);
+                console.log('[DDR Overlays] Primary color:', pilot_color, 'Secondary color:', pilot_secondary_color);
+            }
+
             // Dual-color animation
             let baseBoxShadow = '0 0 ' + glowIntensity + 'px ' + pilot_color;
             let pulseBoxShadowSecondary = '0 0 ' + (glowIntensity * 1.8) + 'px ' + pilot_secondary_color;
 
-            avatarStyle = 'border: ' + borderThickness + 'px solid ' + pilot_color + '; ' +
-                          'box-shadow: ' + baseBoxShadow + '; ' +
-                          '--pilot-primary-color: ' + pilot_color + '; ' +
-                          '--pilot-secondary-color: ' + pilot_secondary_color + '; ' +
-                          '--avatar-border-style: ' + baseBoxShadow + '; ' +
-                          '--avatar-border-style-pulse-secondary: ' + pulseBoxShadowSecondary + '; ' +
-                          'animation-duration: ' + animationSpeed + 's;';
-            avatarClass = 'pulse-avatar-glow-dual';
+            keyframesStyle = '@keyframes ' + animationName + ' {' +
+                '0%, 45% {' +
+                    'border-color: ' + pilot_color + ';' +
+                    'box-shadow: ' + baseBoxShadow + ';' +
+                '}' +
+                '50%, 95% {' +
+                    'border-color: ' + pilot_secondary_color + ';' +
+                    'box-shadow: ' + pulseBoxShadowSecondary + ';' +
+                '}' +
+                '100% {' +
+                    'border-color: ' + pilot_color + ';' +
+                    'box-shadow: ' + baseBoxShadow + ';' +
+                '}' +
+            '}';
         } else {
             // Single-color animation
             let baseBoxShadow = '0 0 ' + glowIntensity + 'px ' + pilot_color;
             let pulseBoxShadow = '0 0 ' + (glowIntensity * 1.8) + 'px ' + pilot_color;
-            avatarStyle = 'border: ' + borderThickness + 'px solid ' + pilot_color + '; ' +
-                          'box-shadow: ' + baseBoxShadow + '; ' +
-                          '--avatar-border-style: ' + baseBoxShadow + '; ' +
-                          '--avatar-border-style-pulse: ' + pulseBoxShadow + '; ' +
-                          'animation-duration: ' + animationSpeed + 's;';
-            avatarClass = 'pulse-avatar-glow';
-        }
-=======
-    for (var i in leaderboard) {
-        let pilot_name = leaderboard[i].callsign;
 
-        // Add channel info to pilot name if frequency data is available AND setting is enabled
-        var showChannel = localStorage.getItem('ddr_show_channel') === 'true';
-        if (showChannel && typeof ddr_frequency_data !== 'undefined' && ddr_frequency_data && typeof leaderboard[i].node !== 'undefined') {
-            let node_index = leaderboard[i].node;
-            if (ddr_frequency_data[node_index] && ddr_frequency_data[node_index].band && ddr_frequency_data[node_index].channel) {
-                let channel_label = ddr_frequency_data[node_index].band + ddr_frequency_data[node_index].channel;
-                pilot_name += ' [' + channel_label + ']';
-            }
+            keyframesStyle = '@keyframes ' + animationName + ' {' +
+                '0%, 100% {' +
+                    'box-shadow: ' + baseBoxShadow + ';' +
+                '}' +
+                '50% {' +
+                    'box-shadow: ' + pulseBoxShadow + ';' +
+                '}' +
+            '}';
         }
 
-        let flagImg = getFlagURL(leaderboard[i].pilot_id, ddr_pilot_data);
-        let pilotImg = getPilotImgURL(leaderboard[i]);
->>>>>>> 9bfba9edab816457ad9e98009052f3676767d386
+        // Inject keyframes into a style element if not already present
+        if (!$('#keyframe-' + animationName).length) {
+            $('<style id="keyframe-' + animationName + '">' + keyframesStyle + '</style>').appendTo('head');
+        }
+
+        // Apply inline animation style
+        let avatarStyle = 'border: ' + borderThickness + 'px solid ' + pilot_color + '; ' +
+                          'animation: ' + animationName + ' ' + animationSpeed + 's ease-in-out infinite;';
+        let avatarClass = '';
 
         let html = '<div class="nextup_pilot">';
         if (show_position) {

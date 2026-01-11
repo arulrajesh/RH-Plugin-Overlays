@@ -41,6 +41,7 @@
 
 <body>
 
+<script type="text/javascript" charset="utf-8" src="/ddr_overlays/static/js/ddr_settings.js"></script>
 <script type="text/javascript" charset="utf-8" src="/ddr_overlays/static/js/ddr_overlays.js"></script>
 
 <script type="text/javascript" charset="utf-8">
@@ -80,6 +81,11 @@
     }
 
     $(document).ready(function () {
+        // Load settings from server (works for both Chrome and OBS!)
+        DDR_Settings.load(function(settings) {
+            console.log('[DDR Overlays - Last Heat] Settings loaded and ready');
+        });
+
         // get pi time
         rotorhazard.pi_time_request = window.performance.now();
         socket.emit('get_pi_time');
@@ -115,14 +121,16 @@
             // Rebuild the display if we have leaderboard data waiting
             if (ddr_last_leaderboard_data) {
                 $('#nextup_pilot_box').empty();
-                build_nextup(
-                    ddr_last_leaderboard_data.leaderboard,
-                    'current',
-                    ddr_last_leaderboard_data.meta,
-                    ddr_pilot_data,
-                    ddr_frequency_data,
-                    true  // show_position = true for last_heat
-                );
+                DDR_Settings.ready(function() {
+                    build_nextup(
+                        ddr_last_leaderboard_data.leaderboard,
+                        'current',
+                        ddr_last_leaderboard_data.meta,
+                        ddr_pilot_data,
+                        ddr_frequency_data,
+                        true  // show_position = true for last_heat
+                    );
+                });
             }
         });
 
@@ -193,7 +201,10 @@
                     meta: race.leaderboard.meta
                 };
 
-                build_nextup(race.leaderboard[leaderboard_type], 'current', race.leaderboard.meta, ddr_pilot_data, ddr_frequency_data, true);
+                // Wait for settings to be loaded before building overlay (critical for OBS)
+                DDR_Settings.ready(function() {
+                    build_nextup(race.leaderboard[leaderboard_type], 'current', race.leaderboard.meta, ddr_pilot_data, ddr_frequency_data, true);
+                });
 
                 var bracket_format_info = bracket_formats[race_bracket_type];
                 let is_winner_bracket = bracket_format_info && ((bracket_format_info[heat_index].type == "winner") || (bracket_format_info[heat_index].type == "preliminary"));

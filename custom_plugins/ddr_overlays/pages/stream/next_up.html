@@ -41,6 +41,7 @@
 
 <body>
 
+<script type="text/javascript" charset="utf-8" src="/ddr_overlays/static/js/ddr_settings.js"></script>
 <script type="text/javascript" charset="utf-8" src="/ddr_overlays/static/js/ddr_overlays.js"></script>
 
 <script type="text/javascript" charset="utf-8">
@@ -80,6 +81,11 @@
     }
 
     $(document).ready(function () {
+        // Load settings from server (works for both Chrome and OBS!)
+        DDR_Settings.load(function(settings) {
+            console.log('[DDR Overlays] Settings loaded and ready');
+        });
+
         // get pi time
         rotorhazard.pi_time_request = window.performance.now();
         socket.emit('get_pi_time');
@@ -118,13 +124,15 @@
             // Rebuild the display if we have leaderboard data waiting
             if (ddr_last_leaderboard_data) {
                 $('#nextup_pilot_box').empty();
-                build_nextup(
-                    ddr_last_leaderboard_data.leaderboard,
-                    'current',
-                    ddr_last_leaderboard_data.meta,
-                    ddr_pilot_data,
-                    ddr_frequency_data
-                );
+                DDR_Settings.ready(function() {
+                    build_nextup(
+                        ddr_last_leaderboard_data.leaderboard,
+                        'current',
+                        ddr_last_leaderboard_data.meta,
+                        ddr_pilot_data,
+                        ddr_frequency_data
+                    );
+                });
             }
         });
 
@@ -133,37 +141,10 @@
         socket.on('leaderboard', function (msg) {
             var race = msg.current;
 
-<<<<<<< HEAD
             leaderboard_type = race.leaderboard.meta.primary_leaderboard;
 
             $('.curr_heat_title').html(race.displayname);
 
-=======
-            // DEBUG: Log leaderboard data to console
-            console.log('=== LEADERBOARD DATA RECEIVED ===');
-            console.log('Full msg:', msg);
-            console.log('Race data:', race);
-
-            leaderboard_type = race.leaderboard.meta.primary_leaderboard;
-            console.log('Leaderboard type:', leaderboard_type);
-
-            var pilots = race.leaderboard[leaderboard_type];
-            console.log('Number of pilots:', pilots.length);
-
-            // Log each pilot's properties
-            pilots.forEach(function(pilot, i) {
-                console.log(`Pilot ${i} [${pilot.callsign}]:`, {
-                    node: pilot.node,
-                    pilot_id: pilot.pilot_id,
-                    position: pilot.position,
-                    all_keys: Object.keys(pilot)
-                });
-            });
-            console.log('=================================');
-
-            $('.curr_heat_title').html(race.displayname);
-
->>>>>>> 9bfba9edab816457ad9e98009052f3676767d386
             // Store leaderboard data for later use
             ddr_last_leaderboard_data = {
                 leaderboard: race.leaderboard[leaderboard_type],
@@ -171,7 +152,10 @@
             };
 
             $('#nextup_pilot_box').empty();
-            build_nextup(race.leaderboard[leaderboard_type], 'current', race.leaderboard.meta, ddr_pilot_data, ddr_frequency_data);
+            // Wait for settings to be loaded before building overlay (critical for OBS)
+            DDR_Settings.ready(function() {
+                build_nextup(race.leaderboard[leaderboard_type], 'current', race.leaderboard.meta, ddr_pilot_data, ddr_frequency_data);
+            });
         });
 
         socket.on('prestage_ready', default_handler['prestage_ready']);

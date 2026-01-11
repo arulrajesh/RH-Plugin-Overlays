@@ -42,6 +42,7 @@
 
 <body>
 
+    <script type="text/javascript" charset="utf-8" src="/ddr_overlays/static/js/ddr_settings.js"></script>
     <script type="text/javascript" charset="utf-8" src="/ddr_overlays/static/js/ddr_overlays.js"></script>
 
     <script type="text/javascript" charset="utf-8">
@@ -60,50 +61,133 @@
         current_laps = false;
         streamnode = {{ node_id }};
         pilot_id = ''; // int
+        current_pilot_color = null; // Store current color for animation updates
+
+        // Function to update node avatar animation based on pilot color and secondary color
+        function updateNodeAnimation(color) {
+            if (!color) return;
+
+            DDR_Settings.ready(function() {
+                var contrast_color = contrastColor(color);
+                $('html').css('--pilot_color', color);
+                $('html').css('--contrast_pilot_color', contrast_color);
+                $('html').css('--position_foreground_color', color);
+                $('html').css('--position_background_color', contrast_color);
+                $('html').css('--fast_lap_color', color);
+                $('html').css('--contrast_fast_lap_color', contrast_color);
+
+                // Check for secondary color and generate dynamic keyframes for OBS compatibility
+                var secondaryColors = DDR_Settings.get('pilot_secondary_colors', {});
+                var animationName = 'node-glow-' + (pilot_id || 'default');
+                var keyframesStyle = '';
+
+                // Get current settings for animation
+                var glowIntensity = DDR_Settings.get('glow_intensity', '15');
+                var animationSpeed = DDR_Settings.get('animation_speed', '2');
+
+                // Debug logging
+                console.log('[DDR Overlays - Node] Updating animation for pilot:', pilot_id);
+                console.log('[DDR Overlays - Node] Secondary colors:', JSON.stringify(secondaryColors));
+
+                if (pilot_id && secondaryColors[pilot_id]) {
+                    var secondaryColor = secondaryColors[pilot_id];
+                    console.log('[DDR Overlays - Node] Using dual-color animation:', color, 'and', secondaryColor);
+
+                    var baseBoxShadow = '0 0 ' + glowIntensity + 'px ' + color;
+                    var pulseBoxShadowSecondary = '0 0 ' + (glowIntensity * 1.8) + 'px ' + secondaryColor;
+
+                    // Generate dual-color keyframes with actual color values
+                    keyframesStyle = '@keyframes ' + animationName + ' {' +
+                        '0%, 45% {' +
+                            'border-color: ' + color + ';' +
+                            'box-shadow: ' + baseBoxShadow + ';' +
+                        '}' +
+                        '50%, 95% {' +
+                            'border-color: ' + secondaryColor + ';' +
+                            'box-shadow: ' + pulseBoxShadowSecondary + ';' +
+                        '}' +
+                        '100% {' +
+                            'border-color: ' + color + ';' +
+                            'box-shadow: ' + baseBoxShadow + ';' +
+                        '}' +
+                    '}';
+                } else {
+                    console.log('[DDR Overlays - Node] Using single-color animation');
+
+                    var baseBoxShadow = '0 0 ' + glowIntensity + 'px ' + color;
+                    var pulseBoxShadow = '0 0 ' + (glowIntensity * 1.8) + 'px ' + color;
+
+                    // Generate single-color keyframes
+                    keyframesStyle = '@keyframes ' + animationName + ' {' +
+                        '0%, 100% {' +
+                            'box-shadow: ' + baseBoxShadow + ';' +
+                        '}' +
+                        '50% {' +
+                            'box-shadow: ' + pulseBoxShadow + ';' +
+                        '}' +
+                    '}';
+                }
+
+                // Remove old keyframes and inject new ones
+                $('#node-keyframe-style').remove();
+                $('<style id="node-keyframe-style">' + keyframesStyle + '</style>').appendTo('head');
+
+                // Apply animation
+                $('#node_avatar').css('animation', animationName + ' ' + animationSpeed + 's ease-in-out infinite');
+            });
+        }
 
         $(document).ready(function () {
             rotorhazard.show_messages = false;
 
-            // Load border and glow settings from localStorage
-            var borderThickness = localStorage.getItem('ddr_border_thickness') || '4';
-            var glowIntensity = localStorage.getItem('ddr_glow_intensity') || '15';
-            var animationSpeed = localStorage.getItem('ddr_animation_speed') || '2';
-            $('html').css('--border_thickness', borderThickness + 'px');
-            $('html').css('--glow_intensity', glowIntensity + 'px');
-            $('html').css('--animation_speed', animationSpeed + 's');
+            // Load settings from server (works for both Chrome and OBS!)
+            DDR_Settings.load(function(settings) {
+                console.log('[DDR Overlays - Node] Settings loaded and ready');
+
+                // Apply settings to CSS variables
+                var borderThickness = DDR_Settings.get('border_thickness', '4');
+                var glowIntensity = DDR_Settings.get('glow_intensity', '15');
+                var animationSpeed = DDR_Settings.get('animation_speed', '2');
+                $('html').css('--border_thickness', borderThickness + 'px');
+                $('html').css('--glow_intensity', glowIntensity + 'px');
+                $('html').css('--animation_speed', animationSpeed + 's');
+            });
 
             socket.on('language', default_handler['language']);
 
             socket.on('current_heat', function (msg) {
+                console.log('[DDR Overlays - Node] current_heat event received');
+                console.log('[DDR Overlays - Node] heatNodes:', msg.heatNodes);
+                console.log('[DDR Overlays - Node] streamnode:', streamnode);
+
                 for (var idx in msg.heatNodes) {
                     hn = msg.heatNodes[streamnode];
+                    console.log('[DDR Overlays - Node] Heat node data:', hn);
+
+                    // Try to get pilot_id from heat data
+                    if (hn.pilot_id) {
+                        pilot_id = hn.pilot_id;
+                        console.log('[DDR Overlays - Node] Found pilot_id in heat data:', pilot_id);
+                    }
+
                     if (hn.activeColor) {
                         var color = colorvalToHex(hn.activeColor);
-                        var contrast_color = contrastColor(color);
-                        $('html').css('--pilot_color', color);
-                        $('html').css('--contrast_pilot_color', contrast_color);
-                        $('html').css('--position_foreground_color', color);
-                        $('html').css('--position_background_color', contrast_color);
-                        $('html').css('--fast_lap_color', color);
-                        $('html').css('--contrast_fast_lap_color', contrast_color);
-
-                        // Check for secondary color and apply dual-color animation
-                        var secondaryColors = JSON.parse(localStorage.getItem('ddr_pilot_secondary_colors') || '{}');
-                        if (pilot_id && secondaryColors[pilot_id]) {
-                            var secondaryColor = secondaryColors[pilot_id];
-                            $('html').css('--pilot_color_secondary', secondaryColor);
-                            $('#node_avatar').css('animation', 'pulse-glow-dual ' + animationSpeed + 's ease-in-out infinite');
-                        } else {
-                            $('#node_avatar').css('animation', 'pulse-glow ' + animationSpeed + 's ease-in-out infinite');
-                        }
+                        current_pilot_color = color; // Store for later updates
+                        console.log('[DDR Overlays - Node] Calling updateNodeAnimation with color:', color, 'and pilot_id:', pilot_id);
+                        updateNodeAnimation(color);
                     } else {
-                        $('html').css('--pilot_color', 'hsl(var(--hue_0), var(--sat_0), var(--lum_0_low))');
-                        $('html').css('--contrast_pilot_color', 'var(--contrast_0_low)');
-                        $('html').css('--position_background_color', 'hsl(var(--hue_1), var(--sat_1), var(--lum_1_high))');
-                        $('html').css('--position_foreground_color', 'var(--contrast_1_high)');
-                        $('html').css('--fast_lap_color', 'hsl(var(--hue_1), var(--sat_1), var(--lum_1_high))');
-                        $('html').css('--contrast_fast_lap_color', 'var(--contrast_1_high)');
-                        $('#node_avatar').css('animation', 'pulse-glow ' + animationSpeed + 's ease-in-out infinite');
+                        DDR_Settings.ready(function() {
+                            $('html').css('--pilot_color', 'hsl(var(--hue_0), var(--sat_0), var(--lum_0_low))');
+                            $('html').css('--contrast_pilot_color', 'var(--contrast_0_low)');
+                            $('html').css('--position_background_color', 'hsl(var(--hue_1), var(--sat_1), var(--lum_1_high))');
+                            $('html').css('--position_foreground_color', 'var(--contrast_1_high)');
+                            $('html').css('--fast_lap_color', 'hsl(var(--hue_1), var(--sat_1), var(--lum_1_high))');
+                            $('html').css('--contrast_fast_lap_color', 'var(--contrast_1_high)');
+
+                            // Use default animation for no active color
+                            var animationSpeed = DDR_Settings.get('animation_speed', '2');
+                            $('#node_avatar').css('animation', 'pulse-glow ' + animationSpeed + 's ease-in-out infinite');
+                        });
                     }
                 }
             });
@@ -243,6 +327,12 @@
 
                         pilot_data = leaderboard[i];
                         pilot_id = pilot_data.pilot_id;
+
+                        // Update animation now that we have pilot_id (critical for OBS dual-color)
+                        if (current_pilot_color) {
+                            console.log('[DDR Overlays - Node] Refreshing animation with pilot_id:', pilot_id);
+                            updateNodeAnimation(current_pilot_color);
+                        }
 
                         if (pilot_data.position == null) {
                             $('#node_pos').html('-');

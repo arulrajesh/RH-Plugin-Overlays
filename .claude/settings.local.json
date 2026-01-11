@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la custom_plugins/ddr_overlays/*.py)"
+    ]
+  }
+}

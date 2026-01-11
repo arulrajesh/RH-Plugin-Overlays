@@ -141,6 +141,54 @@ def initialize(rhapi):
 
         return jsonify({"success": True, "new_url": file_url})
 
+    ### API endpoints for settings (server-side storage) ###
+    SETTINGS_FILE = 'plugins/ddr_overlays/data/settings.json'
+    os.makedirs(os.path.dirname(SETTINGS_FILE), exist_ok=True)
+
+    def load_settings():
+        """Load settings from JSON file"""
+        if os.path.exists(SETTINGS_FILE):
+            try:
+                with open(SETTINGS_FILE, 'r') as f:
+                    return json.load(f)
+            except:
+                return {}
+        return {}
+
+    def save_settings(settings):
+        """Save settings to JSON file"""
+        try:
+            with open(SETTINGS_FILE, 'w') as f:
+                json.dump(settings, f, indent=2)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to save settings: {e}")
+            return False
+
+    @bp.route("/ddr_overlays/api/settings", methods=["GET"])
+    def get_settings():
+        """Get all settings"""
+        settings = load_settings()
+        return jsonify(settings)
+
+    @bp.route("/ddr_overlays/api/settings", methods=["POST"])
+    def update_settings():
+        """Update settings"""
+        try:
+            new_settings = request.get_json()
+            if not new_settings:
+                return jsonify({"error": "No data provided"}), 400
+
+            settings = load_settings()
+            settings.update(new_settings)
+
+            if save_settings(settings):
+                return jsonify({"success": True, "settings": settings})
+            else:
+                return jsonify({"error": "Failed to save settings"}), 500
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
     ### upload pilot image bulk ###
     @bp.route("/upload_zip", methods=["POST"])
     def upload_zip():

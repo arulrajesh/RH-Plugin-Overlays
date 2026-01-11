@@ -14,6 +14,7 @@
     <script type="text/javascript" src="/static/svgasset.js"></script>
     <script type="text/javascript" src="/static/rh-ui.js"></script>
     <script type="text/javascript" src="/static/rotorhazard.js"></script>
+    <script type="text/javascript" charset="utf-8" src="/ddr_overlays/static/js/ddr_settings.js"></script>
     <script type="text/javascript" charset="utf-8" src="/ddr_overlays/static/js/ddr_overlays.js"></script>
 
     <script>
@@ -31,57 +32,54 @@
         var ddr_class_data;
 
         $(document).ready(function () {
-            // Load show_channel setting from localStorage
-            var showChannelSetting = localStorage.getItem('ddr_show_channel');
-            if (showChannelSetting === 'true') {
-                $('#show_channel_toggle').prop('checked', true);
-            }
+            // Load settings from server
+            DDR_Settings.load(function(settings) {
+                console.log('[DDR Settings Page] Settings loaded from server');
+
+                // Load show_channel setting
+                var showChannelSetting = DDR_Settings.get('show_channel', false);
+                $('#show_channel_toggle').prop('checked', showChannelSetting);
+
+                // Load border thickness
+                var borderThickness = DDR_Settings.get('border_thickness', '4');
+                $('#border_thickness').val(borderThickness);
+                $('#border_value').text(borderThickness);
+
+                // Load glow intensity
+                var glowIntensity = DDR_Settings.get('glow_intensity', '15');
+                $('#glow_intensity').val(glowIntensity);
+                $('#glow_value').text(glowIntensity);
+
+                // Load animation speed
+                var animationSpeed = DDR_Settings.get('animation_speed', '2');
+                $('#animation_speed').val(animationSpeed);
+                $('#animation_speed_value').text(animationSpeed);
+            });
 
             // Save show_channel setting when toggled
             $('#show_channel_toggle').on('change', function() {
-                localStorage.setItem('ddr_show_channel', $(this).is(':checked'));
+                DDR_Settings.set('show_channel', $(this).is(':checked'));
             });
 
-<<<<<<< HEAD
-            // Load border thickness and glow intensity from localStorage
-            var borderThickness = localStorage.getItem('ddr_border_thickness');
-            if (borderThickness !== null) {
-                $('#border_thickness').val(borderThickness);
-                $('#border_value').text(borderThickness);
-            }
-
-            var glowIntensity = localStorage.getItem('ddr_glow_intensity');
-            if (glowIntensity !== null) {
-                $('#glow_intensity').val(glowIntensity);
-                $('#glow_value').text(glowIntensity);
-            }
-
-            // Update border thickness display and save to localStorage
+            // Update border thickness display and save to server
             $('#border_thickness').on('input', function() {
                 var value = $(this).val();
                 $('#border_value').text(value);
-                localStorage.setItem('ddr_border_thickness', value);
+                DDR_Settings.set('border_thickness', value);
             });
 
-            // Update glow intensity display and save to localStorage
+            // Update glow intensity display and save to server
             $('#glow_intensity').on('input', function() {
                 var value = $(this).val();
                 $('#glow_value').text(value);
-                localStorage.setItem('ddr_glow_intensity', value);
+                DDR_Settings.set('glow_intensity', value);
             });
 
-            // Load animation speed from localStorage
-            var animationSpeed = localStorage.getItem('ddr_animation_speed');
-            if (animationSpeed !== null) {
-                $('#animation_speed').val(animationSpeed);
-                $('#animation_speed_value').text(animationSpeed);
-            }
-
-            // Update animation speed display and save to localStorage
+            // Update animation speed display and save to server
             $('#animation_speed').on('input', function() {
                 var value = $(this).val();
                 $('#animation_speed_value').text(value);
-                localStorage.setItem('ddr_animation_speed', value);
+                DDR_Settings.set('animation_speed', value);
             });
 
             // Function to render pilot color pickers
@@ -90,8 +88,8 @@
                 $container.empty();
 
                 pilots.forEach(pilot => {
-                    // Get stored secondary color from localStorage
-                    let storedColors = JSON.parse(localStorage.getItem('ddr_pilot_secondary_colors') || '{}');
+                    // Get stored secondary color from server
+                    let storedColors = DDR_Settings.get('pilot_secondary_colors', {});
                     let secondaryColor = storedColors[pilot.pilot_id] || '';
 
                     const $pilotDiv = $(`
@@ -107,17 +105,17 @@
                     $pilotDiv.find('.secondary-color-picker').on('change', function() {
                         let pilotId = $(this).data('pilot-id');
                         let color = $(this).val();
-                        let colors = JSON.parse(localStorage.getItem('ddr_pilot_secondary_colors') || '{}');
+                        let colors = DDR_Settings.get('pilot_secondary_colors', {});
                         colors[pilotId] = color;
-                        localStorage.setItem('ddr_pilot_secondary_colors', JSON.stringify(colors));
+                        DDR_Settings.set('pilot_secondary_colors', colors);
                     });
 
                     // Handle clear button
                     $pilotDiv.find('.clear-secondary-color').on('click', function() {
                         let pilotId = $(this).data('pilot-id');
-                        let colors = JSON.parse(localStorage.getItem('ddr_pilot_secondary_colors') || '{}');
+                        let colors = DDR_Settings.get('pilot_secondary_colors', {});
                         delete colors[pilotId];
-                        localStorage.setItem('ddr_pilot_secondary_colors', JSON.stringify(colors));
+                        DDR_Settings.set('pilot_secondary_colors', colors);
                         // Reset color picker to primary color
                         let primaryColor = pilot.color || '#b9b9b9';
                         $pilotDiv.find('.secondary-color-picker').val(primaryColor);
@@ -127,8 +125,6 @@
                 });
             }
 
-=======
->>>>>>> 9bfba9edab816457ad9e98009052f3676767d386
             socket.on('language', function (msg) {
                 if (msg.language) {
                     rotorhazard.interface_language = msg.language;
@@ -461,7 +457,6 @@
                     When enabled, pilot names will display with their channel (e.g., "Pilot [R6]")
                 </p>
             </div>
-<<<<<<< HEAD
 
             <div style="margin: 20px 0;">
                 <h5 style="margin-bottom: 15px;">Avatar Border Settings</h5>
@@ -504,8 +499,7 @@
                     <!-- Pilot color pickers will be dynamically generated here -->
                 </div>
             </div>
-=======
->>>>>>> 9bfba9edab816457ad9e98009052f3676767d386
+
         </div>
 
     <style>
