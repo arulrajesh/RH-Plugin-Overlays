@@ -31,6 +31,17 @@
         var ddr_class_data;
 
         $(document).ready(function () {
+            // Load show_channel setting from localStorage
+            var showChannelSetting = localStorage.getItem('ddr_show_channel');
+            if (showChannelSetting === 'true') {
+                $('#show_channel_toggle').prop('checked', true);
+            }
+
+            // Save show_channel setting when toggled
+            $('#show_channel_toggle').on('change', function() {
+                localStorage.setItem('ddr_show_channel', $(this).is(':checked'));
+            });
+
             socket.on('language', function (msg) {
                 if (msg.language) {
                     rotorhazard.interface_language = msg.language;
@@ -349,6 +360,19 @@
 
             <br>
         </form>
+        </div>
+
+        <div class="form-container text-center mb-5" style="margin-top: 30px;">
+            <h4>Overlay Settings</h4>
+            <div style="margin: 20px 0;">
+                <label style="display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer;">
+                    <input type="checkbox" id="show_channel_toggle" style="width: auto; cursor: pointer;">
+                    <span>Show channel names in "Next Up" and "Last Heat" overlays</span>
+                </label>
+                <p style="font-size: 12px; color: #666; margin-top: 10px;">
+                    When enabled, pilot names will display with their channel (e.g., "Pilot [R6]")
+                </p>
+            </div>
         </div>
 
     <style>
