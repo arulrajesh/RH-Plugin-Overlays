@@ -52,6 +52,7 @@
         'pilot_data',
         'result_data',
         'heat_data',
+        'current_heat',
         'class_data',
         'leaderboard',
         'race_status',
@@ -66,6 +67,7 @@
     var ddr_class_data;
     var ddr_frequency_data;
     var ddr_last_leaderboard_data; // Store last leaderboard to rebuild when frequency data arrives
+    var ddr_heat_colors = {}; // Store activeColor from current_heat event (respects seat/pilot color setting)
 
     function race_kickoff(msg) {
         rotorhazard.timer.stopAll();
@@ -107,6 +109,36 @@
             ddr_race_data = msg;
         });
 
+        socket.on('current_heat', function (msg) {
+            // Capture activeColor from heat data (respects RotorHazard's seat/pilot color setting)
+            ddr_heat_colors = {}; // Reset
+
+            if (msg.heatNodes) {
+                for (var nodeIdx in msg.heatNodes) {
+                    var heatNode = msg.heatNodes[nodeIdx];
+                    if (heatNode && heatNode.pilot_id && heatNode.activeColor) {
+                        ddr_heat_colors[heatNode.pilot_id] = heatNode.activeColor;
+                    }
+                }
+            }
+
+            // Rebuild display if we have leaderboard data
+            if (ddr_last_leaderboard_data) {
+                $('#nextup_pilot_box').empty();
+                DDR_Settings.ready(function() {
+                    build_nextup(
+                        ddr_last_leaderboard_data.leaderboard,
+                        'current',
+                        ddr_last_leaderboard_data.meta,
+                        ddr_pilot_data,
+                        ddr_frequency_data,
+                        true, // show_position = true for last_heat
+                        ddr_heat_colors // Pass heat colors
+                    );
+                });
+            }
+        });
+
         socket.on('heat_data', function (msg) {
             ddr_heat_data = msg;
         });
@@ -128,7 +160,8 @@
                         ddr_last_leaderboard_data.meta,
                         ddr_pilot_data,
                         ddr_frequency_data,
-                        true  // show_position = true for last_heat
+                        true,  // show_position = true for last_heat
+                        ddr_heat_colors // Pass heat colors
                     );
                 });
             }
@@ -203,7 +236,7 @@
 
                 // Wait for settings to be loaded before building overlay (critical for OBS)
                 DDR_Settings.ready(function() {
-                    build_nextup(race.leaderboard[leaderboard_type], 'current', race.leaderboard.meta, ddr_pilot_data, ddr_frequency_data, true);
+                    build_nextup(race.leaderboard[leaderboard_type], 'current', race.leaderboard.meta, ddr_pilot_data, ddr_frequency_data, true, ddr_heat_colors);
                 });
 
                 var bracket_format_info = bracket_formats[race_bracket_type];

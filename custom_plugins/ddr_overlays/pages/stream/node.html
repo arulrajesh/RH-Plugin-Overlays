@@ -85,13 +85,8 @@
                 var glowIntensity = DDR_Settings.get('glow_intensity', '15');
                 var animationSpeed = DDR_Settings.get('animation_speed', '2');
 
-                // Debug logging
-                console.log('[DDR Overlays - Node] Updating animation for pilot:', pilot_id);
-                console.log('[DDR Overlays - Node] Secondary colors:', JSON.stringify(secondaryColors));
-
                 if (pilot_id && secondaryColors[pilot_id]) {
                     var secondaryColor = secondaryColors[pilot_id];
-                    console.log('[DDR Overlays - Node] Using dual-color animation:', color, 'and', secondaryColor);
 
                     var baseBoxShadow = '0 0 ' + glowIntensity + 'px ' + color;
                     var pulseBoxShadowSecondary = '0 0 ' + (glowIntensity * 1.8) + 'px ' + secondaryColor;
@@ -112,8 +107,6 @@
                         '}' +
                     '}';
                 } else {
-                    console.log('[DDR Overlays - Node] Using single-color animation');
-
                     var baseBoxShadow = '0 0 ' + glowIntensity + 'px ' + color;
                     var pulseBoxShadow = '0 0 ' + (glowIntensity * 1.8) + 'px ' + color;
 
@@ -156,24 +149,17 @@
             socket.on('language', default_handler['language']);
 
             socket.on('current_heat', function (msg) {
-                console.log('[DDR Overlays - Node] current_heat event received');
-                console.log('[DDR Overlays - Node] heatNodes:', msg.heatNodes);
-                console.log('[DDR Overlays - Node] streamnode:', streamnode);
-
                 for (var idx in msg.heatNodes) {
                     hn = msg.heatNodes[streamnode];
-                    console.log('[DDR Overlays - Node] Heat node data:', hn);
 
                     // Try to get pilot_id from heat data
                     if (hn.pilot_id) {
                         pilot_id = hn.pilot_id;
-                        console.log('[DDR Overlays - Node] Found pilot_id in heat data:', pilot_id);
                     }
 
                     if (hn.activeColor) {
                         var color = colorvalToHex(hn.activeColor);
                         current_pilot_color = color; // Store for later updates
-                        console.log('[DDR Overlays - Node] Calling updateNodeAnimation with color:', color, 'and pilot_id:', pilot_id);
                         updateNodeAnimation(color);
                     } else {
                         DDR_Settings.ready(function() {
@@ -330,7 +316,6 @@
 
                         // Update animation now that we have pilot_id (critical for OBS dual-color)
                         if (current_pilot_color) {
-                            console.log('[DDR Overlays - Node] Refreshing animation with pilot_id:', pilot_id);
                             updateNodeAnimation(current_pilot_color);
                         }
 

@@ -164,7 +164,7 @@ function get_number_of_pilots_from_format(bracket_type) {
 
 
 /* HTML generators */
-function build_nextup(leaderboard, display_type, meta, ddr_pilot_data, ddr_frequency_data, show_position=false) {
+function build_nextup(leaderboard, display_type, meta, ddr_pilot_data, ddr_frequency_data, show_position=false, ddr_heat_colors={}) {
     if (typeof(display_type) === 'undefined') {
         var display_type = 'by_race_time';
     }
@@ -201,37 +201,27 @@ function build_nextup(leaderboard, display_type, meta, ddr_pilot_data, ddr_frequ
         let pilot_secondary_color = null;
         let current_pilot_id = sortedLeaderboard[i].pilot_id;
 
-        if (ddr_pilot_data && Array.isArray(ddr_pilot_data)) {
+        // Priority 1: Use activeColor from current_heat (respects RotorHazard seat/pilot color setting)
+        if (ddr_heat_colors && ddr_heat_colors[current_pilot_id]) {
+            pilot_color = colorvalToHex(ddr_heat_colors[current_pilot_id]);
+        }
+        // Priority 2: Fallback to pilot_data color (always pilot-specific)
+        else if (ddr_pilot_data && Array.isArray(ddr_pilot_data)) {
             let pilot = ddr_pilot_data.find(p => p.pilot_id === current_pilot_id);
             if (pilot && pilot.color) {
                 pilot_color = pilot.color;
-
-                // Check for secondary color from server-side settings
-                let secondaryColors = DDR_Settings.get('pilot_secondary_colors', {});
-
-                // Debug logging for OBS troubleshooting
-                if (i === 0) {
-                    console.log('[DDR Overlays] Secondary colors from server:', JSON.stringify(secondaryColors));
-                    console.log('[DDR Overlays] Looking for pilot ID:', current_pilot_id);
-                }
-
-                if (secondaryColors[current_pilot_id]) {
-                    pilot_secondary_color = secondaryColors[current_pilot_id];
-                    if (i === 0) {
-                        console.log('[DDR Overlays] Found secondary color:', pilot_secondary_color);
-                    }
-                }
             }
+        }
+
+        // Check for secondary color from server-side settings
+        let secondaryColors = DDR_Settings.get('pilot_secondary_colors', {});
+
+        if (secondaryColors[current_pilot_id]) {
+            pilot_secondary_color = secondaryColors[current_pilot_id];
         }
 
         // Add channel info to pilot name if frequency data is available AND setting is enabled
         var showChannel = DDR_Settings.get('show_channel', false);
-
-        // Debug logging for OBS troubleshooting
-        if (i === 0) {
-            console.log('[DDR Overlays] Show channel setting:', showChannel);
-            console.log('[DDR Overlays] Frequency data available:', typeof ddr_frequency_data !== 'undefined' && ddr_frequency_data);
-        }
 
         if (showChannel && typeof ddr_frequency_data !== 'undefined' && ddr_frequency_data && typeof sortedLeaderboard[i].node !== 'undefined') {
             let node_index = sortedLeaderboard[i].node;
