@@ -143,35 +143,29 @@
             socket.on('class_data', function (msg) {
                 ddr_class_data = msg.classes;
 
-                const selectElement = document.getElementById("class_id");
+                // Update all class dropdowns
+                var classSelects = ['class_id', 'de_seeding_class', 'de_class'];
+                classSelects.forEach(function(selectId) {
+                    var selectElement = document.getElementById(selectId);
+                    if (!selectElement) return;
 
-                // save selected value
-                const selectedValue = selectElement.value;
+                    var selectedValue = selectElement.value;
 
-                // efficient update of class list
-                const newOptionsSet = new Set(ddr_class_data);
+                    // Clear and rebuild
+                    selectElement.innerHTML = '';
 
-                // remove classes
-                Array.from(selectElement.options).forEach(option => {
-                    if (!newOptionsSet.has(option.value)) {
-                        option.remove();
-                    }
-                });
-
-                // add classes
-                Object.values(ddr_class_data).forEach(race_class => {
-                    if (![...selectElement.options].some(option => option.value === race_class)) {
-                        const option = document.createElement('option');
+                    Object.values(ddr_class_data).forEach(function(race_class) {
+                        var option = document.createElement('option');
                         option.value = race_class.id;
                         option.textContent = race_class.name ? race_class.name : __('Class') + ' ' + race_class.id;
                         selectElement.appendChild(option);
+                    });
+
+                    // Restore selected value
+                    if (selectedValue) {
+                        selectElement.value = selectedValue;
                     }
                 });
-
-                // restore selected value
-                if (newOptionsSet.has(selectedValue)) {
-                    selectElement.value = selectedValue;
-                }
             });
 
             $("#toggleHeader").on("click", function() {
@@ -272,6 +266,30 @@
             let bracket_type = document.getElementById("bracket_type").value;
             let class_id = document.getElementById("class_id").value;
             let finalUrl = baseURL + "/" + encodeURIComponent(bracket_type) + "/" + encodeURIComponent(class_id);
+            window.open(finalUrl, '_blank' + Math.random());
+        };
+
+        function openDELink(event, baseURL) {
+            event.preventDefault();
+            let seeding_class = document.getElementById("de_seeding_class").value;
+            let de_class = document.getElementById("de_class").value;
+            if (!seeding_class || !de_class) {
+                alert("Please select both a Seeding Class and a DE Class.");
+                return;
+            }
+            let finalUrl = baseURL + "/" + encodeURIComponent(seeding_class) + "/" + encodeURIComponent(de_class);
+            window.open(finalUrl, '_blank' + Math.random());
+        };
+
+        function openDEPortraitLink(event) {
+            event.preventDefault();
+            let seeding_class = document.getElementById("de_seeding_class").value;
+            let de_class = document.getElementById("de_class").value;
+            if (!seeding_class || !de_class) {
+                alert("Please select both a Seeding Class and a DE Class.");
+                return;
+            }
+            let finalUrl = "/ddr_overlays/stream/de_leaderboard/" + encodeURIComponent(seeding_class) + "/" + encodeURIComponent(de_class) + "/portrait";
             window.open(finalUrl, '_blank' + Math.random());
         };
     </script>
@@ -621,6 +639,52 @@
             </tr>
         </tbody>
     </table>
+    </div>
+
+    <div class="text-center mb-5" style="margin-top: 40px;">
+        <h3>Double Elimination Overlays:</h3>
+        <p style="max-width: 700px; margin: 0 auto 20px auto; font-size: 14px; color: #666;">
+            These overlays require a Seeding Class (qualifier results) and a DE Class (elimination heats).
+        </p>
+
+        <div class="form-container text-center" style="margin-bottom: 20px;">
+            <label for="de_seeding_class">Seeding Class (Qualifiers):</label>
+            <select id="de_seeding_class">
+                <!-- Populated dynamically from class_data -->
+            </select>
+            <br><br>
+            <label for="de_class">DE Class (Elimination):</label>
+            <select id="de_class">
+                <!-- Populated dynamically from class_data -->
+            </select>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Link</th>
+                    <th>Description</th>
+                    <th>Required parameters</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><a href="#" onclick='openDELink(event, "/ddr_overlays/stream/de_leaderboard")' class="link-primary link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">DE Leaderboard (1920x1080)</a></td>
+                    <td>Double elimination standings table with positions 1-16</td>
+                    <td>Seeding class<br>DE class</td>
+                </tr>
+                <tr>
+                    <td><a href="#" onclick='openDEPortraitLink(event)' class="link-primary link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">DE Leaderboard - Portrait</a></td>
+                    <td>DE standings in portrait mode (auto-paginating)</td>
+                    <td>Seeding class<br>DE class</td>
+                </tr>
+                <tr>
+                    <td><a href="#" onclick='openDELink(event, "/ddr_overlays/stream/de_bracket")' class="link-primary link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">DE Bracket (1920x1080)</a></td>
+                    <td>Visual bracket diagram with race cards, pilot info, connectors, and live status</td>
+                    <td>Seeding class<br>DE class</td>
+                </tr>
+            </tbody>
+        </table>
     </div>
 
     <div class="text-center mb-5">

@@ -1,7 +1,15 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ls -la custom_plugins/ddr_overlays/*.py)"
+      "Bash(ls -la custom_plugins/ddr_overlays/*.py)",
+      "Bash(git clone:*)",
+      "WebFetch(domain:www.multigp.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(find:*)",
+      "Bash(where:*)",
+      "Bash(dir:*)",
+      "Bash(findstr:*)",
+      "Bash(python -c:*)"
     ]
   }
 }

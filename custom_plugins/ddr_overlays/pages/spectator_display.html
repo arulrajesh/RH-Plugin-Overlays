@@ -1,0 +1,1272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RotorHazard Spectator Display</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a0e27;
+            color: white;
+            overflow: hidden;
+        }
+
+        /* Main Container */
+        .display-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        /* Mode Selector (Hidden by default, shown with 'M' key) */
+        .mode-selector {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 15px;
+            border-radius: 10px;
+            z-index: 1000;
+            display: none;
+        }
+
+        .mode-selector.visible {
+            display: block;
+        }
+
+        .mode-btn {
+            display: block;
+            width: 100%;
+            padding: 10px 20px;
+            margin: 5px 0;
+            background: #667eea;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.3s;
+        }
+
+        .mode-btn:hover {
+            background: #764ba2;
+            transform: translateX(5px);
+        }
+
+        .mode-btn.active {
+            background: #28a745;
+        }
+
+        /* Connection Status */
+        .status-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 999;
+            font-size: 0.9em;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        .status-connected {
+            background: #28a745;
+        }
+
+        .status-disconnected {
+            background: #dc3545;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Display Modes */
+        .display-mode {
+            display: none;
+            width: 100%;
+            height: 100%;
+        }
+
+        .display-mode.active {
+            display: block;
+        }
+
+        /* Mode 1: Live Race Display */
+        #live-race {
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+            height: 100vh;
+            padding: 60px 20px 20px;
+        }
+
+        .race-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .race-header h1 {
+            font-size: 3em;
+            text-transform: uppercase;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        .race-status {
+            font-size: 1.5em;
+            padding: 10px 30px;
+            border-radius: 50px;
+            display: inline-block;
+            font-weight: bold;
+        }
+
+        .race-status.staging {
+            background: #ffc107;
+            color: #000;
+        }
+
+        .race-status.racing {
+            background: #28a745;
+            animation: blink 1s infinite;
+        }
+
+        .race-status.done {
+            background: #dc3545;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .leaderboard-container {
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .leaderboard-item {
+            display: grid;
+            grid-template-columns: 80px 60px 1fr 150px 150px 150px;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.05);
+            margin: 10px 0;
+            padding: 20px;
+            border-radius: 15px;
+            border-left: 5px solid;
+            transition: all 0.3s;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .leaderboard-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: scale(1.02);
+        }
+
+        .position {
+            font-size: 3em;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .position-1 { color: #ffd700; }
+        .position-2 { color: #c0c0c0; }
+        .position-3 { color: #cd7f32; }
+
+        .pilot-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: #667eea;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+
+        .pilot-info h3 {
+            font-size: 1.8em;
+            margin-bottom: 5px;
+        }
+
+        .pilot-info .team {
+            color: #999;
+            font-size: 1em;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 0.8em;
+            color: #999;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+
+        .race-timer {
+            text-align: center;
+            font-size: 2em;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+        }
+
+        /* Mode 2: Pilot Profile */
+        #pilot-profile {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            padding: 80px 50px 30px;
+            height: 100vh;
+        }
+
+        .profile-main {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%);
+            border-radius: 20px;
+            padding: 40px;
+            animation: fadeIn 0.8s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .profile-avatar {
+            width: 300px;
+            height: 300px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 8em;
+            font-weight: bold;
+            margin-bottom: 30px;
+            border: 10px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+
+        .profile-avatar img {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .profile-callsign {
+            font-size: 4em;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .profile-team {
+            font-size: 1.8em;
+            color: #999;
+            margin-bottom: 20px;
+        }
+
+        .profile-country {
+            font-size: 3em;
+            margin-bottom: 20px;
+        }
+
+        .profile-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            width: 100%;
+        }
+
+        .profile-details {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .stats-card {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 30px;
+            border-radius: 15px;
+            border-left: 5px solid #667eea;
+        }
+
+        .stats-card h3 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 15px 0;
+            font-size: 1.3em;
+        }
+
+        .stat-row .label {
+            color: #999;
+        }
+
+        .stat-row .value {
+            font-weight: bold;
+        }
+
+        .achievements {
+            background: rgba(255, 215, 0, 0.1);
+            padding: 30px;
+            border-radius: 15px;
+            border-left: 5px solid #ffd700;
+        }
+
+        .achievement-item {
+            font-size: 1.5em;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .achievement-item:last-child {
+            border-bottom: none;
+        }
+
+        /* Mode 3: Race Replay */
+        #race-replay {
+            padding: 80px 50px 30px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .replay-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .replay-header h1 {
+            font-size: 3em;
+            margin-bottom: 10px;
+        }
+
+        .replay-controls {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .replay-btn {
+            padding: 15px 30px;
+            font-size: 1.2em;
+            background: #667eea;
+            border: none;
+            border-radius: 10px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .replay-btn:hover {
+            background: #764ba2;
+            transform: scale(1.05);
+        }
+
+        .replay-btn:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+
+        .timeline {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 30px;
+            overflow-y: auto;
+        }
+
+        .timeline-event {
+            display: flex;
+            gap: 20px;
+            margin: 20px 0;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            border-left: 5px solid #667eea;
+            animation: eventPopIn 0.5s ease-out;
+        }
+
+        @keyframes eventPopIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .event-time {
+            font-size: 2em;
+            font-weight: bold;
+            min-width: 120px;
+            color: #667eea;
+        }
+
+        .event-details {
+            flex: 1;
+        }
+
+        .event-details h3 {
+            font-size: 1.5em;
+            margin-bottom: 5px;
+        }
+
+        .event-details p {
+            color: #999;
+            font-size: 1.1em;
+        }
+
+        /* Mode 4: Full Leaderboard */
+        #full-leaderboard {
+            padding: 80px 50px 30px;
+            height: 100vh;
+            overflow-y: auto;
+        }
+
+        .leaderboard-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .leaderboard-header h1 {
+            font-size: 4em;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .podium {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 50px;
+        }
+
+        .podium-place {
+            text-align: center;
+            padding: 40px;
+            border-radius: 20px;
+            transition: all 0.3s;
+        }
+
+        .podium-1 {
+            background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+            color: #000;
+            transform: scale(1.1);
+            order: 2;
+        }
+
+        .podium-2 {
+            background: linear-gradient(135deg, #c0c0c0 0%, #e8e8e8 100%);
+            color: #000;
+            order: 1;
+        }
+
+        .podium-3 {
+            background: linear-gradient(135deg, #cd7f32 0%, #e89a5a 100%);
+            color: #000;
+            order: 3;
+        }
+
+        .podium-place:hover {
+            transform: scale(1.15);
+        }
+
+        .podium-place .position {
+            font-size: 5em;
+            font-weight: bold;
+        }
+
+        .podium-place .callsign {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin: 20px 0;
+        }
+
+        .podium-place .stats {
+            font-size: 1.3em;
+        }
+
+        /* Settings Panel */
+        .settings-panel {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 15px;
+            border-radius: 10px;
+            display: none;
+        }
+
+        .settings-panel.visible {
+            display: block;
+        }
+
+        .settings-panel label {
+            display: block;
+            margin: 10px 0 5px;
+            font-size: 0.9em;
+        }
+
+        .settings-panel input {
+            width: 100%;
+            padding: 8px;
+            border-radius: 5px;
+            border: none;
+            background: #222;
+            color: white;
+        }
+
+        /* Keyboard shortcuts help */
+        .shortcuts-help {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 0.9em;
+            display: none;
+        }
+
+        .shortcuts-help.visible {
+            display: block;
+        }
+
+        .shortcuts-help h3 {
+            margin-bottom: 10px;
+            color: #667eea;
+        }
+
+        .shortcut {
+            margin: 5px 0;
+        }
+
+        .key {
+            display: inline-block;
+            background: #667eea;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-weight: bold;
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="display-container">
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div>
+                <span class="status-indicator status-disconnected" id="statusIndicator"></span>
+                <span id="statusText">Connecting to RotorHazard...</span>
+            </div>
+            <div id="raceInfo">
+                <span id="heatName">-</span> | <span id="className">-</span>
+            </div>
+        </div>
+
+        <!-- Mode Selector -->
+        <div class="mode-selector" id="modeSelector">
+            <h3 style="margin-bottom: 10px; color: #667eea;">Display Modes</h3>
+            <button class="mode-btn active" onclick="switchMode('live-race')">Live Race</button>
+            <button class="mode-btn" onclick="switchMode('pilot-profile')">Pilot Profiles</button>
+            <button class="mode-btn" onclick="switchMode('race-replay')">Race Replay</button>
+            <button class="mode-btn" onclick="switchMode('full-leaderboard')">Full Leaderboard</button>
+        </div>
+
+        <!-- Mode 1: Live Race Display -->
+        <div id="live-race" class="display-mode active">
+            <div class="race-header">
+                <h1 id="liveRaceTitle">RACE IN PROGRESS</h1>
+                <span class="race-status staging" id="raceStatus">READY</span>
+            </div>
+
+            <div class="leaderboard-container" id="liveLeaderboard">
+                <!-- Dynamic leaderboard items will be inserted here -->
+            </div>
+
+            <div class="race-timer" id="raceTimer">
+                <div>Race Time: <strong id="timerDisplay">0:00.000</strong></div>
+            </div>
+        </div>
+
+        <!-- Mode 2: Pilot Profile -->
+        <div id="pilot-profile" class="display-mode">
+            <div class="profile-main">
+                <div class="profile-avatar" id="profileAvatar">
+                    <span id="profileAvatarText">?</span>
+                </div>
+                <div class="profile-callsign" id="profileCallsign">Loading...</div>
+                <div class="profile-team" id="profileTeam">Team</div>
+                <div class="profile-country" id="profileCountry">🏁</div>
+
+                <div class="profile-stats">
+                    <div class="stats-card">
+                        <h3>Season Stats</h3>
+                        <div class="stat-row">
+                            <span class="label">Races</span>
+                            <span class="value" id="profileRaces">-</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="label">Wins</span>
+                            <span class="value" id="profileWins">-</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="label">Podiums</span>
+                            <span class="value" id="profilePodiums">-</span>
+                        </div>
+                    </div>
+                    <div class="stats-card">
+                        <h3>Performance</h3>
+                        <div class="stat-row">
+                            <span class="label">Best Lap</span>
+                            <span class="value" id="profileBestLap">-</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="label">Avg Lap</span>
+                            <span class="value" id="profileAvgLap">-</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="label">Consistency</span>
+                            <span class="value" id="profileConsistency">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="profile-details">
+                <div class="achievements">
+                    <h3 style="color: #ffd700; margin-bottom: 20px;">🏆 Achievements</h3>
+                    <div id="profileAchievements">
+                        <div class="achievement-item">Loading achievements...</div>
+                    </div>
+                </div>
+
+                <div class="stats-card">
+                    <h3>Equipment</h3>
+                    <div id="profileEquipment">
+                        <div class="stat-row">
+                            <span class="label">Frame</span>
+                            <span class="value">-</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="label">Motors</span>
+                            <span class="value">-</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="label">VTX</span>
+                            <span class="value">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mode 3: Race Replay -->
+        <div id="race-replay" class="display-mode">
+            <div class="replay-header">
+                <h1>RACE REPLAY</h1>
+                <p style="color: #999; font-size: 1.2em;">Relive the action</p>
+            </div>
+
+            <div class="replay-controls">
+                <button class="replay-btn" onclick="replayControl('restart')">⏮ Restart</button>
+                <button class="replay-btn" id="playPauseBtn" onclick="replayControl('playpause')">▶ Play</button>
+                <button class="replay-btn" onclick="replayControl('speed')">⏩ Speed: <span id="speedDisplay">1x</span></button>
+            </div>
+
+            <div class="timeline" id="replayTimeline">
+                <p style="text-align: center; color: #999; font-size: 1.2em;">No replay data available. Complete a race to see replay.</p>
+            </div>
+        </div>
+
+        <!-- Mode 4: Full Leaderboard -->
+        <div id="full-leaderboard" class="display-mode">
+            <div class="leaderboard-header">
+                <h1>CHAMPIONSHIP STANDINGS</h1>
+                <p style="color: #999; font-size: 1.3em; margin-top: 10px;">Overall Rankings</p>
+            </div>
+
+            <div class="podium" id="podiumDisplay">
+                <!-- Podium places will be inserted here -->
+            </div>
+
+            <div class="leaderboard-container" id="fullLeaderboardList">
+                <!-- Full leaderboard will be inserted here -->
+            </div>
+        </div>
+
+        <!-- Settings Panel -->
+        <div class="settings-panel" id="settingsPanel">
+            <h3 style="color: #667eea; margin-bottom: 10px;">Settings</h3>
+            <label>Server URL</label>
+            <input type="text" id="serverUrlInput" placeholder="Leave empty for current server">
+            <button class="mode-btn" onclick="reconnect()" style="margin-top: 10px;">Reconnect</button>
+        </div>
+
+        <!-- Keyboard Shortcuts Help -->
+        <div class="shortcuts-help" id="shortcutsHelp">
+            <h3>Keyboard Shortcuts</h3>
+            <div class="shortcut"><span class="key">M</span> Toggle Mode Selector</div>
+            <div class="shortcut"><span class="key">1</span> Live Race</div>
+            <div class="shortcut"><span class="key">2</span> Pilot Profiles</div>
+            <div class="shortcut"><span class="key">3</span> Race Replay</div>
+            <div class="shortcut"><span class="key">4</span> Full Leaderboard</div>
+            <div class="shortcut"><span class="key">S</span> Toggle Settings</div>
+            <div class="shortcut"><span class="key">H</span> Toggle This Help</div>
+            <div class="shortcut"><span class="key">F</span> Fullscreen</div>
+        </div>
+    </div>
+
+    <script src="/static/socket.io-4.6.1/socket.io.min.js"></script>
+    <script>
+        // Global Variables
+        var socket = null;
+        var currentMode = 'live-race';
+        var raceData = {
+            status: 'ready',
+            pilots: [],
+            laps: [],
+            startTime: null,
+            leaderboard: []
+        };
+        var profileIndex = 0;
+        var profileInterval = null;
+        var replayData = [];
+        var replayPlaying = false;
+        var replaySpeed = 1;
+        var timerInterval = null;
+
+        // Initialize
+        function init() {
+            connectToServer();
+            setupKeyboardShortcuts();
+            startProfileCarousel();
+        }
+
+        // Connect to RotorHazard Server
+        function connectToServer() {
+            if (socket) {
+                console.log('Already connected or connecting');
+                return;
+            }
+
+            try {
+                updateStatus(false, 'Connecting...');
+
+                // Get server URL from input or use window location
+                var urlInput = document.getElementById('serverUrlInput').value.trim();
+                var serverUrl = urlInput || window.location.origin;
+
+                console.log('Connecting to:', serverUrl);
+                socket = io.connect(serverUrl);
+
+                socket.on('connect', function() {
+                    updateStatus(true, 'Connected to RotorHazard');
+                    console.log('Connected to RotorHazard server');
+                    requestInitialData();
+                });
+
+                socket.on('disconnect', function() {
+                    updateStatus(false, 'Disconnected');
+                    socket = null;
+                });
+
+                socket.on('connect_error', function(error) {
+                    updateStatus(false, 'Connection Failed: ' + error.message);
+                    console.error('Connection error:', error);
+                    socket = null;
+                });
+
+                // Listen to race events
+                setupEventListeners();
+            } catch (error) {
+                console.error('Failed to initialize Socket.IO:', error);
+                updateStatus(false, 'Failed to Initialize');
+                socket = null;
+            }
+        }
+
+        function requestInitialData() {
+            if (!socket) return;
+
+            socket.emit('load_data', {
+                'load_types': ['leaderboard', 'heat_data', 'pilot_data', 'race_status', 'frequency_data', 'class_data']
+            });
+        }
+
+        function setupEventListeners() {
+            // Leaderboard updates
+            socket.on('leaderboard', function(data) {
+                console.log('Leaderboard:', data);
+                processLeaderboardData(data);
+            });
+
+            // Race status updates
+            socket.on('race_status', function(data) {
+                console.log('Race status:', data);
+                updateRaceStatus(data.status);
+            });
+
+            // Pilot data
+            socket.on('pilot_data', function(data) {
+                console.log('Pilot data:', data);
+                if (data.pilots) {
+                    raceData.pilots = data.pilots;
+                }
+            });
+
+            // Heat data
+            socket.on('heat_data', function(data) {
+                console.log('Heat data:', data);
+                if (data.heats && data.heats.length > 0) {
+                    updateHeatInfo({
+                        heat_name: data.heats[0].name || 'Heat',
+                        class_name: data.heats[0].class_name || '-'
+                    });
+                }
+            });
+
+            // Race stage
+            socket.on('race_stage', function(data) {
+                console.log('Race staged:', data);
+                raceData.status = 'staging';
+                updateRaceStatus('staging');
+            });
+
+            // Race start
+            socket.on('race_start', function(data) {
+                console.log('Race started:', data);
+                raceData.status = 'racing';
+                raceData.startTime = Date.now();
+                updateRaceStatus('racing');
+                startTimer();
+            });
+
+            // Race stop
+            socket.on('race_stop', function(data) {
+                console.log('Race stopped:', data);
+                raceData.status = 'done';
+                updateRaceStatus('done');
+                stopTimer();
+            });
+
+            // Race save
+            socket.on('race_save', function(data) {
+                console.log('Race saved:', data);
+                saveReplayData(data);
+            });
+        }
+
+        // Process Leaderboard Data (from RotorHazard format)
+        function processLeaderboardData(data) {
+            try {
+                if (!data || !data.current) return;
+
+                var race = data.current;
+
+                // Update heat info
+                if (race.displayname) {
+                    updateHeatInfo({
+                        heat_name: race.displayname,
+                        class_name: race.class_name || '-'
+                    });
+                }
+
+                // Get leaderboard data
+                if (race.leaderboard && race.leaderboard.meta) {
+                    var leaderboardType = race.leaderboard.meta.primary_leaderboard;
+                    var pilots = race.leaderboard[leaderboardType];
+
+                    if (pilots && pilots.length > 0) {
+                        raceData.leaderboard = pilots;
+                        raceData.pilots = pilots; // Also update pilots list
+                        updateLeaderboard(pilots);
+                    }
+                }
+            } catch (e) {
+                console.error('Error processing leaderboard data:', e);
+            }
+        }
+
+        // Update Status
+        function updateStatus(connected, text) {
+            var indicator = document.getElementById('statusIndicator');
+            var statusText = document.getElementById('statusText');
+
+            indicator.className = 'status-indicator ' + (connected ? 'status-connected' : 'status-disconnected');
+            statusText.textContent = text;
+        }
+
+        // Update Race Status
+        function updateRaceStatus(status) {
+            var statusElement = document.getElementById('raceStatus');
+            statusElement.className = 'race-status ' + status;
+
+            switch(status) {
+                case 0:
+                case 'staging':
+                    statusElement.textContent = 'STAGING';
+                    break;
+                case 1:
+                case 'racing':
+                    statusElement.textContent = 'RACING';
+                    break;
+                case 2:
+                case 'done':
+                    statusElement.textContent = 'FINISHED';
+                    break;
+                default:
+                    statusElement.textContent = 'READY';
+            }
+        }
+
+        // Update Leaderboard
+        function updateLeaderboard(data) {
+            var container = document.getElementById('liveLeaderboard');
+
+            if (!data || !data.length) {
+                container.innerHTML = '<p style="text-align: center; color: #999; font-size: 1.5em;">Waiting for race data...</p>';
+                return;
+            }
+
+            var html = '';
+            for (var i = 0; i < data.length; i++) {
+                var pilot = data[i];
+                var position = i + 1;
+                var positionClass = position <= 3 ? 'position-' + position : '';
+                var borderColor = pilot.color || '#667eea';
+                var initial = pilot.callsign ? pilot.callsign.charAt(0) : '?';
+
+                html += '<div class="leaderboard-item" style="border-left-color: ' + borderColor + '">' +
+                    '<div class="position ' + positionClass + '">' + position + '</div>' +
+                    '<div class="pilot-avatar" style="background: ' + borderColor + '">' + initial + '</div>' +
+                    '<div class="pilot-info">' +
+                        '<h3>' + (pilot.callsign || 'Unknown') + '</h3>' +
+                        '<span class="team">' + (pilot.team || 'No Team') + '</span>' +
+                    '</div>' +
+                    '<div class="stat">' +
+                        '<span class="stat-label">LAPS</span>' +
+                        '<span class="stat-value">' + (pilot.laps || 0) + '</span>' +
+                    '</div>' +
+                    '<div class="stat">' +
+                        '<span class="stat-label">TOTAL TIME</span>' +
+                        '<span class="stat-value">' + (formatTime(pilot.total_time) || '-') + '</span>' +
+                    '</div>' +
+                    '<div class="stat">' +
+                        '<span class="stat-label">FASTEST LAP</span>' +
+                        '<span class="stat-value">' + (formatTime(pilot.fastest_lap) || '-') + '</span>' +
+                    '</div>' +
+                '</div>';
+            }
+
+            container.innerHTML = html;
+        }
+
+
+        // Update Heat Info
+        function updateHeatInfo(data) {
+            if (!data) return;
+
+            if (data.heat_name) {
+                document.getElementById('heatName').textContent = data.heat_name;
+            }
+            if (data.class_name) {
+                document.getElementById('className').textContent = data.class_name;
+            }
+        }
+
+        // Timer Functions
+        function startTimer() {
+            stopTimer();
+            timerInterval = setInterval(function() {
+                if (raceData.startTime) {
+                    var elapsed = Date.now() - raceData.startTime;
+                    document.getElementById('timerDisplay').textContent = formatTime(elapsed);
+                }
+            }, 10);
+        }
+
+        function stopTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+        }
+
+        // Format Time
+        function formatTime(ms) {
+            if (!ms) return '0:00.000';
+
+            var totalSeconds = Math.floor(ms / 1000);
+            var minutes = Math.floor(totalSeconds / 60);
+            var seconds = totalSeconds % 60;
+            var milliseconds = Math.floor(ms % 1000);
+
+            return minutes + ':' +
+                   seconds.toString().padStart(2, '0') + '.' +
+                   milliseconds.toString().padStart(3, '0');
+        }
+
+        // Mode Switching
+        function switchMode(mode) {
+            // Hide all modes
+            document.querySelectorAll('.display-mode').forEach(el => {
+                el.classList.remove('active');
+            });
+
+            // Show selected mode
+            document.getElementById(mode).classList.add('active');
+
+            // Update button states
+            document.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            currentMode = mode;
+
+            // Start/stop profile carousel
+            if (mode === 'pilot-profile') {
+                startProfileCarousel();
+            } else {
+                stopProfileCarousel();
+            }
+        }
+
+        // Pilot Profile Carousel
+        function startProfileCarousel() {
+            if (profileInterval) clearInterval(profileInterval);
+
+            profileInterval = setInterval(function() {
+                if (raceData.pilots && raceData.pilots.length > 0) {
+                    displayPilotProfile(raceData.pilots[profileIndex]);
+                    profileIndex = (profileIndex + 1) % raceData.pilots.length;
+                }
+            }, 10000); // Change every 10 seconds
+
+            // Display first pilot immediately
+            if (raceData.pilots && raceData.pilots.length > 0) {
+                displayPilotProfile(raceData.pilots[0]);
+            }
+        }
+
+        function stopProfileCarousel() {
+            if (profileInterval) {
+                clearInterval(profileInterval);
+                profileInterval = null;
+            }
+        }
+
+        function displayPilotProfile(pilot) {
+            if (!pilot) return;
+
+            document.getElementById('profileCallsign').textContent = pilot.callsign || 'Unknown';
+            document.getElementById('profileTeam').textContent = pilot.team || 'No Team';
+            document.getElementById('profileCountry').textContent = pilot.country_flag || '🏁';
+            document.getElementById('profileAvatarText').textContent = pilot.callsign ? pilot.callsign.charAt(0) : '?';
+
+            // Mock stats (in real implementation, fetch from API)
+            document.getElementById('profileRaces').textContent = Math.floor(Math.random() * 50) + 10;
+            document.getElementById('profileWins').textContent = Math.floor(Math.random() * 15);
+            document.getElementById('profilePodiums').textContent = Math.floor(Math.random() * 25);
+            document.getElementById('profileBestLap').textContent = formatTime(25000 + Math.random() * 5000);
+            document.getElementById('profileAvgLap').textContent = formatTime(28000 + Math.random() * 3000);
+            document.getElementById('profileConsistency').textContent = (0.85 + Math.random() * 0.1).toFixed(2);
+
+            // Achievements
+            const achievements = [
+                '🏆 Season Champion 2025',
+                '⚡ Fastest Qualifier Award',
+                '🎯 Most Consistent Pilot',
+                '🔥 10+ Win Streak'
+            ];
+            document.getElementById('profileAchievements').innerHTML = achievements
+                .slice(0, Math.floor(Math.random() * 2) + 2)
+                .map(a => `<div class="achievement-item">${a}</div>`)
+                .join('');
+        }
+
+        // Save Replay Data
+        function saveReplayData(data) {
+            replayData = [];
+
+            if (data.laps) {
+                data.laps.forEach((lap, index) => {
+                    replayData.push({
+                        time: lap.lap_time_stamp || index * 30,
+                        event: 'lap_complete',
+                        pilot: lap.pilot_name,
+                        details: `Lap ${lap.lap_number} - ${formatTime(lap.lap_time)}`
+                    });
+                });
+            }
+
+            if (data.results) {
+                replayData.push({
+                    time: data.race_time || 180,
+                    event: 'race_finish',
+                    details: `Winner: ${data.results[0]?.pilot_name || 'Unknown'}`
+                });
+            }
+
+            displayReplay();
+        }
+
+        function displayReplay() {
+            const timeline = document.getElementById('replayTimeline');
+
+            if (!replayData.length) {
+                timeline.innerHTML = '<p style="text-align: center; color: #999; font-size: 1.2em;">No replay data available.</p>';
+                return;
+            }
+
+            timeline.innerHTML = replayData.map(event => `
+                <div class="timeline-event">
+                    <div class="event-time">${formatTime(event.time * 1000)}</div>
+                    <div class="event-details">
+                        <h3>${event.event.replace(/_/g, ' ').toUpperCase()}</h3>
+                        <p>${event.pilot || ''} ${event.details || ''}</p>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Replay Controls
+        function replayControl(action) {
+            switch(action) {
+                case 'restart':
+                    displayReplay();
+                    break;
+                case 'playpause':
+                    // Toggle play/pause (future implementation)
+                    break;
+                case 'speed':
+                    replaySpeed = replaySpeed === 1 ? 2 : replaySpeed === 2 ? 4 : 1;
+                    document.getElementById('speedDisplay').textContent = replaySpeed + 'x';
+                    break;
+            }
+        }
+
+        // Keyboard Shortcuts
+        function setupKeyboardShortcuts() {
+            document.addEventListener('keydown', function(e) {
+                switch(e.key.toLowerCase()) {
+                    case 'm':
+                        toggleElement('modeSelector');
+                        break;
+                    case '1':
+                        switchModeByNumber('live-race');
+                        break;
+                    case '2':
+                        switchModeByNumber('pilot-profile');
+                        break;
+                    case '3':
+                        switchModeByNumber('race-replay');
+                        break;
+                    case '4':
+                        switchModeByNumber('full-leaderboard');
+                        break;
+                    case 's':
+                        toggleElement('settingsPanel');
+                        break;
+                    case 'h':
+                        toggleElement('shortcutsHelp');
+                        break;
+                    case 'f':
+                        toggleFullscreen();
+                        break;
+                }
+            });
+        }
+
+        function switchModeByNumber(mode) {
+            var displays = document.querySelectorAll('.display-mode');
+            for (var i = 0; i < displays.length; i++) {
+                displays[i].classList.remove('active');
+            }
+            document.getElementById(mode).classList.add('active');
+            currentMode = mode;
+        }
+
+        function toggleElement(id) {
+            var element = document.getElementById(id);
+            element.classList.toggle('visible');
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        function reconnect() {
+            if (socket) {
+                socket.disconnect();
+                socket = null;
+            }
+            connectToServer();
+        }
+
+        // Initialize on load
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>

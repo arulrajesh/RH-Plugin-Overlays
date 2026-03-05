@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <title>Pilot Queue</title>
+    <link rel="stylesheet" href="/pilot_queue/static/css/queue.css">
+</head>
+<body class="kiosk">
+
+<!-- Header -->
+<div class="kiosk-header">
+    <div>
+        <div class="kiosk-title">Pilot Queue</div>
+        <div class="kiosk-event" id="event_name"></div>
+    </div>
+    <div class="kiosk-status">
+        <div class="dot"></div>
+        <span>Live</span>
+    </div>
+</div>
+
+<!-- Currently Running -->
+<div class="section-title">Currently Running</div>
+<div class="current-heat-section" id="current_heat_section">
+    <div class="no-current-heat">No heat currently running</div>
+</div>
+
+<!-- Queued Pilots -->
+<div class="section-title">Queued Pilots</div>
+<div class="queue-section" id="queue_section">
+    <div style="text-align:center; color:#888; padding:20px;">Loading...</div>
+</div>
+
+<!-- Completed Heats -->
+<div class="section-title" id="completed_title" style="display:none;">Completed Heats</div>
+<div class="completed-section" id="completed_section"></div>
+
+<!-- Spotlight Search Modal -->
+<div class="spotlight-overlay" id="spotlight_modal">
+    <div class="spotlight-panel">
+        <div class="spotlight-header">
+            <span class="slot-badge" id="spotlight_slot_badge">Slot 1</span>
+            <input type="text" class="spotlight-input" id="spotlight_input" placeholder="Search pilot..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+            <button class="spotlight-close" onclick="closeSpotlight()">&times;</button>
+        </div>
+        <div class="spotlight-list" id="spotlight_list"></div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+    // ============================================
+    // STATE
+    // ============================================
+    var queueData = null;   // from /api/status
+    var heatsData = null;   // from /api/heats
+    var selectedSlot = null;
+
+    // ============================================
+    // TOAST
+    // ============================================
+    function showToast(text, type) {
+        var el = document.getElementById('toast');
+        el.textContent = text;
+        el.className = 'toast ' + type;
+        void el.offsetWidth;
+        el.classList.add('show');
+        setTimeout(function() { el.classList.remove('show'); }, 3000);
+    }
+
+    // ============================================
+    // SPOTLIGHT MODAL
+    // ============================================
+    function openSpotlight(slotIdx) {
+        selectedSlot = slotIdx;
+        document.getElementById('spotlight_slot_badge').textContent = 'Slot ' + (slotIdx + 1);
+        var input = document.getElementById('spotlight_input');
+        input.value = '';
+        document.getElementById('spotlight_modal').classList.add('active');
+        setTimeout(function() { input.focus(); }, 100);
+        renderSpotlightList('');
+    }
+
+    function closeSpotlight() {
+        document.getElementById('spotlight_modal').classList.remove('active');
+        selectedSlot = null;
+    }
+
+    function renderSpotlightList(filter) {
+        var list = document.getElementById('spotlight_list');
+        if (!queueData) { list.innerHTML = '<div class="spotlight-empty">Loading...</div>'; return; }
+
+        var stats = queueData.pilot_stats;
+        var maxPacks = queueData.config.max_packs || 10;
+        var filterLower = filter.toLowerCase();
+
+        // Collect and sort pilots
+        var pilots = Object.keys(stats).map(function(pid) {
+            return { id: parseInt(pid), data: stats[pid] };
+        }).sort(function(a, b) {
+            // Eligible first, then alphabetical
+            if (a.data.eligible !== b.data.eligible) return a.data.eligible ? -1 : 1;
+            return (a.data.callsign || '').localeCompare(b.data.callsign || '');
+        });
+
+        // Filter
+        if (filterLower) {
+            pilots = pilots.filter(function(p) {
+                return (p.data.callsign || '').toLowerCase().indexOf(filterLower) !== -1;
+            });
+        }
+
+        if (pilots.length === 0) {
+            list.innerHTML = '<div class="spotlight-empty">No pilots found</div>';
+            return;
+        }
+
+        var html = '';
+        pilots.forEach(function(p) {
+            var cs = p.data.callsign || 'Pilot ' + p.id;
+            var eligible = p.data.eligible;
+            var packInfo = (p.data.packs_flown + p.data.packs_queued) + '/' + maxPacks;
+
+            if (!eligible) {
+                html += '<div class="spotlight-pilot ineligible">';
+                html += '<span class="sp-name">' + esc(cs) + '</span>';
+                html += '<span class="sp-info">' + esc(p.data.reason || 'Unavailable') + '</span>';
+                html += '</div>';
+            } else {
+                html += '<div class="spotlight-pilot" onclick="joinSlot(' + p.id + ')">';
+                html += '<span class="sp-name">' + esc(cs) + '</span>';
+                html += '<span class="sp-info">' + packInfo + ' packs</span>';
+                html += '</div>';
+            }
+        });
+
+        list.innerHTML = html;
+    }
+
+    document.getElementById('spotlight_input').addEventListener('input', function() {
+        renderSpotlightList(this.value);
+    });
+
+    // Close on overlay click
+    document.getElementById('spotlight_modal').addEventListener('click', function(e) {
+        if (e.target === this) closeSpotlight();
+    });
+
+    // Close on Escape
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeSpotlight();
+    });
+
+    // ============================================
+    // API
+    // ============================================
+    function joinSlot(pilotId) {
+        if (selectedSlot === null) return;
+        var slot = selectedSlot;
+        closeSpotlight();
+
+        fetch('/pilot_queue/api/join', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pilot_id: pilotId, slot: slot })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showToast(data.message, data.success ? 'success' : 'error');
+            pollStatus();
+            pollHeats();
+        })
+        .catch(function() { showToast('Error joining queue', 'error'); });
+    }
+
+    // ============================================
+    // RENDER: CURRENTLY RUNNING + UPCOMING HEATS
+    // ============================================
+    function renderCurrentHeat(heats, numSlots) {
+        var section = document.getElementById('current_heat_section');
+
+        // Collect all non-completed heats (active + upcoming)
+        var running = [];
+        if (heats) {
+            for (var i = 0; i < heats.length; i++) {
+                if (heats[i].status === 'active' || heats[i].status === 'upcoming') {
+                    running.push(heats[i]);
+                }
+            }
+        }
+
+        if (running.length === 0) {
+            section.innerHTML = '<div class="no-current-heat">No heats generated yet</div>';
+            return;
+        }
+
+        var html = '<table class="current-heat-table"><thead><tr>';
+        html += '<th class="round-col"></th>';
+        for (var s = 0; s < numSlots; s++) {
+            html += '<th>Slot ' + (s + 1) + '</th>';
+        }
+        html += '<th style="width:90px;">Status</th>';
+        html += '</tr></thead><tbody>';
+
+        running.forEach(function(heat) {
+            html += '<tr>';
+            html += '<td class="round-cell">Round:' + heat.heat_num + '</td>';
+
+            var slotMap = {};
+            heat.pilots.forEach(function(p) { slotMap[p.slot] = p; });
+
+            for (var s = 0; s < numSlots; s++) {
+                var p = slotMap[s];
+                if (p) {
+                    html += '<td class="pilot-filled">' + esc(p.callsign) + ' (' + p.packs + ')</td>';
+                } else {
+                    html += '<td class="pilot-empty">[EMPTY]</td>';
+                }
+            }
+
+            var statusLabel = heat.status === 'active' ? 'Racing' : 'Up Next';
+            var statusClass = heat.status === 'active' ? 'pilot-filled' : 'round-cell';
+            html += '<td class="' + statusClass + '">' + statusLabel + '</td>';
+            html += '</tr>';
+        });
+
+        html += '</tbody></table>';
+        section.innerHTML = html;
+    }
+
+    // ============================================
+    // RENDER: QUEUED PILOTS GRID
+    // ============================================
+    function renderQueueGrid(data) {
+        var section = document.getElementById('queue_section');
+        var numSlots = data.config.num_slots || 4;
+        var slots = data.slots;
+        var stats = data.pilot_stats;
+        var maxPacks = data.config.max_packs || 10;
+
+        // Find the maximum queue depth across all slots
+        var maxDepth = 0;
+        for (var i = 0; i < numSlots; i++) {
+            if (slots[i] && slots[i].length > maxDepth) maxDepth = slots[i].length;
+        }
+        // Show at least a few empty rows
+        var numRows = Math.max(maxDepth, 3);
+
+        var html = '<table class="queue-table">';
+
+        // Header row: slot names
+        html += '<thead><tr>';
+        html += '<th class="round-col"></th>';
+        for (var s = 0; s < numSlots; s++) {
+            html += '<th>Slot ' + (s + 1) + '</th>';
+        }
+        html += '</tr></thead><tbody>';
+
+        // Add Pilot button row
+        html += '<tr class="add-pilot-row">';
+        html += '<td></td>';
+        for (var s = 0; s < numSlots; s++) {
+            html += '<td><button class="add-pilot-btn" onclick="openSpotlight(' + s + ')">Add Pilot</button></td>';
+        }
+        html += '</tr>';
+
+        // Slot info row (pilot counts)
+        html += '<tr class="slot-info-row">';
+        html += '<td></td>';
+        for (var s = 0; s < numSlots; s++) {
+            var count = slots[s] ? slots[s].length : 0;
+            html += '<td>' + count + ' pilot' + (count !== 1 ? 's' : '') + '</td>';
+        }
+        html += '</tr>';
+
+        // Queue rows
+        var nextRound = (data.heat_counter || 0) + 1;
+        for (var row = 0; row < numRows; row++) {
+            html += '<tr>';
+            html += '<td class="round-cell">Round:' + (nextRound + row) + '</td>';
+            for (var s = 0; s < numSlots; s++) {
+                var pid = (slots[s] && slots[s][row]) ? slots[s][row] : null;
+                if (pid !== null) {
+                    var ps = stats[pid] || stats[String(pid)];
+                    var name = ps ? ps.callsign : 'Pilot ' + pid;
+                    var packs = ps ? (ps.packs_flown + ps.packs_queued) : 0;
+                    html += '<td class="q-filled">' + esc(name) + ' (' + packs + ')</td>';
+                } else {
+                    html += '<td class="q-empty">[EMPTY]</td>';
+                }
+            }
+            html += '</tr>';
+        }
+
+        html += '</tbody></table>';
+        section.innerHTML = html;
+    }
+
+    // ============================================
+    // RENDER: COMPLETED HEATS
+    // ============================================
+    function renderCompletedHeats(heats, numSlots) {
+        var section = document.getElementById('completed_section');
+        var titleEl = document.getElementById('completed_title');
+
+        if (!heats) { titleEl.style.display = 'none'; section.innerHTML = ''; return; }
+
+        var completed = heats.filter(function(h) { return h.status === 'completed'; });
+        if (completed.length === 0) { titleEl.style.display = 'none'; section.innerHTML = ''; return; }
+
+        titleEl.style.display = '';
+
+        // Show most recent first (reversed)
+        completed = completed.slice().reverse();
+
+        var html = '<table class="completed-table"><thead><tr>';
+        html += '<th class="round-col"></th>';
+        for (var s = 0; s < numSlots; s++) {
+            html += '<th>Slot ' + (s + 1) + '</th>';
+        }
+        html += '</tr></thead><tbody>';
+
+        completed.forEach(function(heat) {
+            html += '<tr>';
+            html += '<td class="round-cell">Round:' + heat.heat_num + '</td>';
+
+            var slotMap = {};
+            heat.pilots.forEach(function(p) { slotMap[p.slot] = p; });
+
+            // If results exist, try to merge position info
+            var resultMap = {};
+            if (heat.results) {
+                heat.results.forEach(function(r) {
+                    resultMap[r.callsign] = r;
+                });
+            }
+
+            for (var s = 0; s < numSlots; s++) {
+                var p = slotMap[s];
+                if (p) {
+                    var r = resultMap[p.callsign];
+                    var label = esc(p.callsign) + ' (' + p.packs + ')';
+                    if (r && r.position) {
+                        label = '#' + r.position + ' ' + label;
+                    }
+                    html += '<td class="result-cell">' + label + '</td>';
+                } else {
+                    html += '<td>-</td>';
+                }
+            }
+            html += '</tr>';
+        });
+
+        html += '</tbody></table>';
+        section.innerHTML = html;
+    }
+
+    // ============================================
+    // POLLING
+    // ============================================
+    function pollStatus() {
+        fetch('/pilot_queue/api/status')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            queueData = data;
+            renderQueueGrid(data);
+            // Re-render spotlight if open
+            if (document.getElementById('spotlight_modal').classList.contains('active')) {
+                renderSpotlightList(document.getElementById('spotlight_input').value);
+            }
+        })
+        .catch(function() {});
+    }
+
+    function pollHeats() {
+        fetch('/pilot_queue/api/heats')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            heatsData = data.heats;
+            var numSlots = (queueData && queueData.config) ? queueData.config.num_slots : 4;
+            renderCurrentHeat(heatsData, numSlots);
+            renderCompletedHeats(heatsData, numSlots);
+        })
+        .catch(function() {});
+    }
+
+    // ============================================
+    // HELPERS
+    // ============================================
+    function esc(str) {
+        var d = document.createElement('div');
+        d.textContent = str;
+        return d.innerHTML;
+    }
+
+    // ============================================
+    // INIT
+    // ============================================
+    try {
+        // Use a temp element to decode HTML entities from Jinja output
+        var tmp = document.createElement('span');
+        tmp.innerHTML = '{{ getOption("eventName") }}';
+        var eventName = tmp.textContent;
+        if (eventName && eventName !== 'None') {
+            document.getElementById('event_name').textContent = 'Event: ' + eventName;
+        }
+    } catch(e) {}
+
+    pollStatus();
+    pollHeats();
+    setInterval(pollStatus, 2000);
+    setInterval(pollHeats, 3000);
+</script>
+
+</body>
+</html>

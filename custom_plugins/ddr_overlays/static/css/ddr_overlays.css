@@ -597,3 +597,295 @@ h1, h2, h3, h4, h5 {
 
 /* END OF FAI LEADERBOARD32 */
 
+
+
+/* DDR DE LEADERBOARD */
+
+#de_leaderboard_container {
+    background-color: #000000DC;
+    border-radius: 16px;
+    color: #fff;
+    font-family: teko, Arial, Helvetica, sans-serif;
+    padding: 20px 30px;
+    width: 100%;
+    max-width: 1400px;
+    margin: 0 auto;
+    box-sizing: border-box;
+}
+
+#de_header {
+    text-align: center;
+    padding: 10px 0 16px 0;
+}
+
+#de_title_text {
+    font-size: 56px;
+    font-weight: 800;
+    text-transform: uppercase;
+    line-height: 1;
+}
+
+#de_subtitle {
+    font-size: 32px;
+    font-weight: 300;
+    color: #aaa;
+    text-transform: uppercase;
+    line-height: 1.2;
+}
+
+#de_event_name {
+    font-size: 28px;
+    font-weight: 200;
+    color: #888;
+    padding-top: 4px;
+}
+
+/* Two-column layout */
+.de_columns {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+}
+
+.de_column {
+    flex: 1;
+    min-width: 300px;
+}
+
+/* Standings table - override stream.css backgrounds and borders */
+.de_table {
+    width: 100%;
+    border-collapse: collapse;
+    background: transparent !important;
+    border: none !important;
+}
+
+.de_table thead tr {
+    border-bottom: 2px solid #333;
+    background: transparent !important;
+}
+
+.de_table th {
+    font-size: 22px;
+    font-weight: 400;
+    text-align: left;
+    padding: 4px 8px;
+    color: #888;
+    text-transform: uppercase;
+    background: transparent !important;
+    border: none !important;
+}
+
+.de_table td {
+    font-size: 30px;
+    padding: 5px 8px;
+    border-bottom: 1px solid #1a1a1a;
+    border-left: none !important;
+    border-right: none !important;
+    border-top: none !important;
+    vertical-align: middle;
+    color: #fff;
+    text-align: left;
+    background: transparent !important;
+}
+
+.de_table tr {
+    background: transparent !important;
+    border: none !important;
+}
+
+.de_table .de_pos {
+    font-size: 36px;
+    font-weight: 800;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.de_table .de_pos sup {
+    font-size: 16px;
+    font-weight: 400;
+}
+
+.de_table .de_avatar {
+    width: 50px;
+    padding: 3px 4px;
+}
+
+.de_table .de_avatar img {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+}
+
+.de_table .de_flag {
+    width: 40px;
+    padding: 3px 4px;
+}
+
+.de_table .de_flag img {
+    width: 32px;
+    height: 20px;
+    border-radius: 2px;
+    object-fit: cover;
+    display: block;
+}
+
+.de_table .de_name {
+    font-weight: 600;
+    font-size: 32px;
+    color: #fff;
+    text-align: left;
+}
+
+.de_table .de_seed {
+    font-size: 22px;
+    color: #666;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.de_table .de_time {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 26px;
+    text-align: right;
+    color: #ccc;
+    white-space: nowrap;
+}
+
+/* Seeding table: single column centered */
+.de_table_seeding {
+    width: 100%;
+    margin: 0 auto;
+}
+
+/* Row transition animation (DDS-style) */
+.de_table tbody tr {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.8s cubic-bezier(0.55, 0, 0.1, 1),
+                transform 0.8s cubic-bezier(0.55, 0, 0.1, 1);
+}
+
+.de_table tbody tr.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.de_table tbody tr.show.de_undetermined {
+    opacity: 0.25;
+}
+
+.de_table tbody tr.hide {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.8s, transform 0.5s;
+}
+
+.de_table tbody tr.hide.de_undetermined {
+    opacity: 0;
+}
+
+/* Row states */
+tr.de_undetermined td.de_pos {
+    opacity: 0.6;
+}
+
+tr.de_determined {
+    background: transparent !important;
+}
+
+tr.de_determined:hover {
+    background-color: #ffffff12 !important;
+}
+
+/* Podium position highlights */
+tr.de_pos_gold td.de_pos {
+    color: #ffd700;
+}
+
+tr.de_pos_silver td.de_pos {
+    color: #c0c0c0;
+}
+
+tr.de_pos_bronze td.de_pos {
+    color: #cd7f32;
+}
+
+/* Loading / no data */
+.de_no_data {
+    text-align: center;
+    font-size: 32px;
+    padding: 60px 20px;
+    opacity: 0.4;
+    font-family: teko, Arial, Helvetica, sans-serif;
+}
+
+/* Final 4 status banner */
+#de_final4_status {
+    text-align: center;
+    padding: 12px 20px;
+    margin-bottom: 16px;
+    background: #0a0a1e;
+    border: 1px solid #222;
+    border-radius: 8px;
+}
+
+#de_final4_status.final4_complete {
+    border-color: #ffd700;
+    background: #1a1a00;
+}
+
+.final4_title {
+    font-size: 28px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #ccc;
+    margin-bottom: 8px;
+}
+
+.final4_winner {
+    font-size: 36px;
+    font-weight: 800;
+    color: #ffd700;
+}
+
+.final4_pilots {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.final4_pilot {
+    font-size: 26px;
+    padding: 4px 12px;
+    background: #ffffff0a;
+    border-radius: 4px;
+}
+
+.final4_name {
+    font-weight: 600;
+}
+
+.final4_star {
+    color: #ffd700;
+    font-size: 22px;
+}
+
+.final4_no_wins {
+    color: #444;
+    font-size: 20px;
+}
+
+/* Page indicator */
+.de_page_indicator {
+    text-align: center;
+    padding: 16px 0 4px 0;
+    font-size: 22px;
+    color: #666;
+}
+
+/* END OF DDR DE LEADERBOARD */
+

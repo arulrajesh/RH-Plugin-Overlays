@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Dutch Drone Racing RotorHazard Plugin</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- Scripts -->
+    <script type="text/javascript" src="/static/jquery-3.6.4/jquery-3.6.4.min.js"></script>
+    <script type="text/javascript" src="/static/articulate/articulate.min.js"></script>
+    <script type="text/javascript" src="/static/socket.io-4.6.1/socket.io.min.js"></script>
+    <script type="text/javascript" src="/static/smoothie/smoothie.js"></script>
+    <script type="text/javascript" src="/static/magnific-1.1.0/magnific-inline-min.js"></script>
+    <script type="text/javascript" src="/static/svgasset.js"></script>
+    <script type="text/javascript" src="/static/rh-ui.js"></script>
+    <script type="text/javascript" src="/static/rotorhazard.js"></script>
+    <script type="text/javascript" charset="utf-8" src="/ddr_overlays/static/js/ddr_settings.js"></script>
+    <script type="text/javascript" charset="utf-8" src="/ddr_overlays/static/js/ddr_overlays.js"></script>
+
+    <script>
+        var data_dependencies = [
+            'all_languages',
+            'language',
+            'result_data',
+            'pilot_data',
+            'class_data',
+        ];
+
+        rotorhazard.show_messages = false;
+
+        var ddr_pilot_data;
+        var ddr_class_data;
+
+        $(document).ready(function () {
+            // Load settings from server
+            DDR_Settings.load(function(settings) {
+                console.log('[DDR Settings Page] Settings loaded from server');
+
+                // Load show_channel setting
+                var showChannelSetting = DDR_Settings.get('show_channel', false);
+                $('#show_channel_toggle').prop('checked', showChannelSetting);
+
+                // Load border thickness
+                var borderThickness = DDR_Settings.get('border_thickness', '4');
+                $('#border_thickness').val(borderThickness);
+                $('#border_value').text(borderThickness);
+
+                // Load glow intensity
+                var glowIntensity = DDR_Settings.get('glow_intensity', '15');
+                $('#glow_intensity').val(glowIntensity);
+                $('#glow_value').text(glowIntensity);
+
+                // Load animation speed
+                var animationSpeed = DDR_Settings.get('animation_speed', '2');
+                $('#animation_speed').val(animationSpeed);
+                $('#animation_speed_value').text(animationSpeed);
+            });
+
+            // Save show_channel setting when toggled
+            $('#show_channel_toggle').on('change', function() {
+                DDR_Settings.set('show_channel', $(this).is(':checked'));
+            });
+
+            // Update border thickness display and save to server
+            $('#border_thickness').on('input', function() {
+                var value = $(this).val();
+                $('#border_value').text(value);
+                DDR_Settings.set('border_thickness', value);
+            });
+
+            // Update glow intensity display and save to server
+            $('#glow_intensity').on('input', function() {
+                var value = $(this).val();
+                $('#glow_value').text(value);
+                DDR_Settings.set('glow_intensity', value);
+            });
+
+            // Update animation speed display and save to server
+            $('#animation_speed').on('input', function() {
+                var value = $(this).val();
+                $('#animation_speed_value').text(value);
+                DDR_Settings.set('animation_speed', value);
+            });
+
+            // Function to render pilot color pickers
+            function renderPilotColorPickers(pilots) {
+                const $container = $('#pilot_color_pickers');
+                $container.empty();
+
+                pilots.forEach(pilot => {
+                    // Get stored secondary color from server
+                    let storedColors = DDR_Settings.get('pilot_secondary_colors', {});
+                    let secondaryColor = storedColors[pilot.pilot_id] || '';
+
+                    const $pilotDiv = $(`
+                        <div class="pilot-color-row" data-pilot-id="${pilot.pilot_id}">
+                            <span class="pilot-name">${pilot.callsign}</span>
+                            <div class="color-display" style="background-color: ${pilot.color || '#b9b9b9'};" title="Primary color (from RotorHazard)"></div>
+                            <input type="color" class="secondary-color-picker" value="${secondaryColor || pilot.color || '#b9b9b9'}" data-pilot-id="${pilot.pilot_id}">
+                            <button class="clear-secondary-color" data-pilot-id="${pilot.pilot_id}">Clear</button>
+                        </div>
+                    `);
+
+                    // Handle secondary color change
+                    $pilotDiv.find('.secondary-color-picker').on('change', function() {
+                        let pilotId = $(this).data('pilot-id');
+                        let color = $(this).val();
+                        let colors = DDR_Settings.get('pilot_secondary_colors', {});
+                        colors[pilotId] = color;
+                        DDR_Settings.set('pilot_secondary_colors', colors);
+                    });
+
+                    // Handle clear button
+                    $pilotDiv.find('.clear-secondary-color').on('click', function() {
+                        let pilotId = $(this).data('pilot-id');
+                        let colors = DDR_Settings.get('pilot_secondary_colors', {});
+                        delete colors[pilotId];
+                        DDR_Settings.set('pilot_secondary_colors', colors);
+                        // Reset color picker to primary color
+                        let primaryColor = pilot.color || '#b9b9b9';
+                        $pilotDiv.find('.secondary-color-picker').val(primaryColor);
+                    });
+
+                    $container.append($pilotDiv);
+                });
+            }
+
+            socket.on('language', function (msg) {
+                if (msg.language) {
+                    rotorhazard.interface_language = msg.language;
+                }
+            });
+
+            socket.on('pilot_data', function (msg) {
+                ddr_pilot_data = msg.pilots;
+
+                // sort by callsign
+                ddr_pilot_data.sort((a, b) => a.callsign.localeCompare(b.callsign));
+                renderPilots(ddr_pilot_data);
+                renderPilotColorPickers(ddr_pilot_data);
+            });
+
+            socket.on('class_data', function (msg) {
+                ddr_class_data = msg.classes;
+
+                const selectElement = document.getElementById("class_id");
+
+                // save selected value
+                const selectedValue = selectElement.value;
+
+                // efficient update of class list
+                const newOptionsSet = new Set(ddr_class_data);
+
+                // remove classes
+                Array.from(selectElement.options).forEach(option => {
+                    if (!newOptionsSet.has(option.value)) {
+                        option.remove();
+                    }
+                });
+
+                // add classes
+                Object.values(ddr_class_data).forEach(race_class => {
+                    if (![...selectElement.options].some(option => option.value === race_class)) {
+                        const option = document.createElement('option');
+                        option.value = race_class.id;
+                        option.textContent = race_class.name ? race_class.name : __('Class') + ' ' + race_class.id;
+                        selectElement.appendChild(option);
+                    }
+                });
+
+                // restore selected value
+                if (newOptionsSet.has(selectedValue)) {
+                    selectElement.value = selectedValue;
+                }
+            });
+
+            $("#toggleHeader").on("click", function() {
+                $("#toggleContent").slideToggle(200);
+                $("#arrow").toggleClass("expanded");
+            });
+
+            // Quando clicco sul bottone, simulo il click sull'input nascosto
+            $(".upload-zip-btn").click(function() {
+                $("#zipInput").click();
+            });
+
+            // Quando scelgo un file ZIP
+            $("#zipInput").on("change", function() {
+                let file = this.files[0];
+                if (!file) return;
+
+                let formData = new FormData();
+                formData.append("zipfile", file);
+
+                $.ajax({
+                    url: "/upload_zip",
+                    type: "POST",
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    success: function(response) {
+                        console.log("Upload ok: ", response);
+                        renderPilots(ddr_pilot_data);
+                    },
+                    error: function(xhr) {
+                        alert("Error: " + xhr.responseJSON.error);
+                    }
+                });
+            });
+        });
+
+        function renderPilots(pilots) {
+            const $grid = $("#pilotsGrid");
+            $grid.empty();
+
+            pilots.forEach(pilot => {
+                const $div = $(`
+                    <div class="pilot" data-id="${pilot.id}">
+                        <img src="${getPilotImgURL(pilot)}" alt="${pilot.callsign}">
+                        <span>${pilot.callsign}</span>
+                        <button class="update-btn">Update avatar</button>
+                    </div>
+                `);
+
+                // "Update avatar" handling
+                $div.find(".update-btn").on("click", function() {
+                    const $img = $div.find("img");
+                    const pilotId = $div.data("id");
+                    const $input = $('<input type="file" accept="image/jpeg">');
+
+                    $input.on("change", function(e) {
+                        const file = e.target.files[0];
+                        if (file) {
+                            // Immediate preview
+                            const reader = new FileReader();
+                            reader.onload = function(ev) {
+                                $img.attr("src", ev.target.result);
+                            };
+                            reader.readAsDataURL(file);
+
+                            // Send to server (file name is modified to make sure it follows the naming convention)
+                            const newFile = new File([file], pilot.callsign.replace(/ /g,"_").toLowerCase() + ".jpg", { type: file.type });
+                            const formData = new FormData();
+                            formData.append("file", newFile);
+                            formData.append("pilot_id", pilot.id);
+
+                            $.ajax({
+                                url: "/upload_pilot_image",
+                                type: "POST",
+                                data: formData,
+                                processData: false,
+                                contentType: false,
+                                success: function(response) {
+                                    console.log("Upload ok: ", response);
+                                    renderPilots(ddr_pilot_data);
+                                },
+                                error: function(xhr) {
+                                    alert("Error: " + xhr.responseJSON.error);
+                                }
+                            });
+                        }
+                    });
+                    $input.trigger("click");
+                });
+
+                $grid.append($div);
+            });
+        }
+
+        function openDynamicLink(event, baseURL) {
+            event.preventDefault();
+            let bracket_type = document.getElementById("bracket_type").value;
+            let class_id = document.getElementById("class_id").value;
+            let finalUrl = baseURL + "/" + encodeURIComponent(bracket_type) + "/" + encodeURIComponent(class_id);
+            window.open(finalUrl, '_blank' + Math.random());
+        };
+    </script>
+
+</head>
+
+<body>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+
+        .toggle-container {
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            width: 90%;
+            overflow: hidden;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .toggle-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: relative;
+            padding: 10px;
+            cursor: pointer;
+            background: #f5f5f5;
+        }
+
+        .toggle-header h2 {
+            margin: 0;
+            font-size: 16px;
+            flex-grow: 1;
+            text-align: center;
+        }
+
+        .arrow {
+            margin-left: auto;
+            cursor: pointer;
+            transition: transform 0.3s;
+            display: inline-block;
+        }
+
+        .arrow.expanded {
+            transform: rotate(90deg);
+        }
+
+        .toggle-content {
+            display: none;
+            padding: 10px;
+        }
+
+        .pilots-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 15px;
+        }
+
+        .pilot {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 10px;
+            background: #fafafa;
+        }
+
+        .pilot img {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1px solid #aaa;
+            margin-bottom: 6px;
+        }
+
+        .pilot span {
+            font-size: 14px;
+            margin-bottom: 6px;
+            text-align: center;
+        }
+
+        .update-btn {
+            padding: 4px 8px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+    </style>
+
+    <header>
+        <img src="/ddr_overlays/static/imgs/ddr_logo_white.png" alt="DDR Logo" height="48px"> 
+    </header>
+
+    <h2 class="text-center">DDR Overlays Plugin</h2>
+    <hr>
+
+    <div class="text-center mb-5">
+        <h3>Important Information:</h3>
+        <p style="max-width: 700px; margin: 0 auto;">
+            The resolutions displayed are a suggestion based on readability and our setup. You can try different resolutions and see what fits best for your stream.
+        </p>
+
+        <br>
+        <p style="max-width: 700px; margin: 0 auto;"><b>Pilot Avatars</b><br>
+            Pilot avatars are visible in the container below and can be uploaded individually with the dedicated button. They are obtained from the /rh-data/shared/avatars/ folder. The file name should be the pilot's callsign in lowercase where spaces have been replaced for underscores (_) and in the .jpg file type. The file should be a square image, preferably 256x256 pixels or 512x612 pixels. If no avatar is found, it will show the default avatar.
+            For a bulk update, store the image files in a zip archive and upload it with the button on top of the grid.
+        </p>
+        <br>
+
+        <div class="toggle-container" style="max-width: 1400px; margin: 0 auto;">
+            <div class="toggle-header" id="toggleHeader">
+                <h2>Pilots</h2>
+                <span class="arrow" id="arrow">▶</span>
+            </div>
+            <div class="toggle-content" id="toggleContent">
+                <div class="zip-upload">
+                    <input type="file" id="zipInput" accept=".zip" style="display: none;">
+                    <button class="update-btn upload-zip-btn">Upload ZIP</button>
+                </div>
+
+                <div class="pilots-grid" id="pilotsGrid">
+                    <!-- Dynamically generated pilots -->
+                </div>
+            </div>
+        </div>
+
+        <br>
+        <p style="max-width: 700px; margin: 0 auto;"><b>Country Flags</b><br>
+            A country can be set as pilot attribute in the pilots tab (dropdown). When set it shows the flag icon before the pilot's callsign.
+            <br>
+            Flags have been downloaded from <a href="https://flagpedia.net/download/images" target="_blank">flagpedia.net</a> (same width 80px, variable height, JPG format).
+        </p>
+
+        <br>
+        <p style="max-width: 700px; margin: 0 auto;"><b>Brackets</b><br>
+            Supported brackets are listed in the option box below and more will follow.
+            <br><br>
+            The advice is to load the whole page as 1 source in OBS and then make 2 scenes, one for the Winner Bracket and one for the Lower Bracket and crop the source accordingly. This way you can easily switch between the two.
+        </p>
+    </div>
+
+    <div class="text-center mb-5">
+        <h3>Overlays:</h3>
+
+        <div class="form-container text-center mb-5">
+        <form id="ddr_form">
+            <label for="bracket_type">Bracket type:</label>
+            <select id="bracket_type">
+                <option value="multigp16">MultiGP 16 double-elimination</option>
+                <!-- <option value="fai16">FAI 16 single-elimination</option> -->
+                <option value="fai16de">FAI 16 double-elimination</option>
+                <!-- <option value="fai32">FAI 32 single-elimination</option> -->
+                <option value="fai32de">FAI 32 double-elimination</option>
+                <!-- <option value="fai64">FAI 64 single-elimination</option> -->
+                <!-- <option value="fai64de">FAI 64 double-elimination</option> -->
+                <option value="ddr8de">DDR 8 double-elimination</option>
+                <option value="none">None</option>
+            </select>
+
+            <br><br>
+
+            <label for="class_id">Class name:</label>
+            <select id="class_id">
+                <!-- <option value="class.id">class.name</option> -->
+            </select>
+
+            <br>
+        </form>
+        </div>
+
+        <div class="form-container text-center mb-5" style="margin-top: 30px;">
+            <h4>Overlay Settings</h4>
+            <div style="margin: 20px 0;">
+                <label style="display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer;">
+                    <input type="checkbox" id="show_channel_toggle" style="width: auto; cursor: pointer;">
+                    <span>Show channel names in "Next Up" and "Last Heat" overlays</span>
+                </label>
+                <p style="font-size: 12px; color: #666; margin-top: 10px;">
+                    When enabled, pilot names will display with their channel (e.g., "Pilot [R6]")
+                </p>
+            </div>
+
+            <div style="margin: 20px 0;">
+                <h5 style="margin-bottom: 15px;">Avatar Border Settings</h5>
+
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px;">
+                        Border Thickness: <span id="border_value">4</span>px
+                    </label>
+                    <input type="range" id="border_thickness" min="0" max="10" value="4" step="1" style="width: 300px;">
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px;">
+                        Glow Intensity: <span id="glow_value">15</span>px
+                    </label>
+                    <input type="range" id="glow_intensity" min="0" max="30" value="15" step="1" style="width: 300px;">
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px;">
+                        Animation Speed: <span id="animation_speed_value">2</span>s per cycle
+                    </label>
+                    <input type="range" id="animation_speed" min="0.5" max="5" value="2" step="0.1" style="width: 300px;">
+                    <p style="font-size: 11px; color: #888; margin-top: 5px;">
+                        Faster (0.5s) ← → Slower (5s)
+                    </p>
+                </div>
+
+                <p style="font-size: 12px; color: #666; margin-top: 10px;">
+                    Customize the colored border, glow effect, and animation speed
+                </p>
+            </div>
+
+            <div style="margin: 20px 0;">
+                <h5 style="margin-bottom: 15px;">Pilot Secondary Colors (Dual-Color Blink Effect)</h5>
+                <p style="font-size: 12px; color: #666; margin-bottom: 15px;">
+                    Set a secondary color for each pilot. The avatar border will alternate between the primary color (from RotorHazard) and the secondary color. Leave cleared for no blink effect.
+                </p>
+                <div id="pilot_color_pickers" style="max-height: 400px; overflow-y: auto;">
+                    <!-- Pilot color pickers will be dynamically generated here -->
+                </div>
+            </div>
+
+        </div>
+
+    <style>
+        .form-container {
+            padding: 20px;
+            margin-left: 35%;
+            margin-right: 35%;
+            border: 2px solid black;
+        }
+        label, input {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        .pilot-color-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            border-bottom: 1px solid #ddd;
+        }
+        .pilot-color-row:hover {
+            background-color: #f5f5f5;
+        }
+        .pilot-name {
+            flex: 1;
+            font-weight: 500;
+            min-width: 150px;
+        }
+        .color-display {
+            width: 30px;
+            height: 30px;
+            border-radius: 4px;
+            border: 2px solid #333;
+        }
+        .secondary-color-picker {
+            width: 50px;
+            height: 35px;
+            border: none;
+            cursor: pointer;
+        }
+        .clear-secondary-color {
+            padding: 6px 12px;
+            font-size: 12px;
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .clear-secondary-color:hover {
+            background-color: #c0392b;
+        }
+
+        table {
+            width: 90%;
+            margin-left: auto;
+            margin-right: auto;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid black;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Link</th>
+                <th>Description</th>
+                <th>Required parameters</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><a href="/ddr_overlays/stream/results" target="_blank" class="link-primary link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">Live Results (1920x800)</a></td>
+                <td>Panel with real time positions and lap times</td>
+                <td>-</td>
+            </tr>
+            <tr>
+                <td><a href="/ddr_overlays/stream/bar?nologo=1" target="_blank" class="link-primary link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">Status Bar (1920x200)</a></td>
+                <td>Status Bar</td>
+                <td>-</td>
+            </tr>
+            <tr>
+                <td><a href="#" onclick='openDynamicLink(event, "/ddr_overlays/stream/leaderboard")' class="link-primary link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">Qualifier Leaderboard - Fullscreen (1920x1080)</a></td>
+                <td>Current leaderboard on a single page, designed for qualifier results</td>
+                <td>Bracket type<br>Qualifier class</td>
+            </tr>
+            <tr>
+                <td><a href="#" onclick='openDynamicLink(event, "/ddr_overlays/stream/leaderboard_pages")' class="link-primary link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">Qualifier Leaderboard - Pages (1920x600)</a></td>
+                <td>Current leaderboard divided in pages of 8 pilots each, designed for qualifier results</td>
+                <td>Bracket type<br>Qualifier class</td>
+            </tr>
+            <tr>
+                <td><a href="#" onclick='openDynamicLink(event, "/ddr_overlays/stream/brackets")' class="link-primary link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">Brackets (1920x2000)</a></td>
+                <td>Bracket diagram of elimination stage</td>
+                <td>Bracket type<br>Race class</td>
+            </tr>
+            <tr>
+                <td><a href="#" onclick='openDynamicLink(event, "/ddr_overlays/stream/last_heat")' class="link-primary link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">Last Heat (1920x800)</a></td>
+                <td>Results of the last heat of elimination stage</td>
+                <td>Bracket type</td>
+            </tr>
+            <tr>
+                <td><a href="#" onclick='openDynamicLink(event, "/ddr_overlays/stream/next_up")' class="link-primary link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">Next Up (1920x800)</a></td>
+                <td>Preview of the next heat</td>
+                <td>-</td>
+            </tr>
+            <tr>
+                <td><a href="#" onclick='openDynamicLink(event, "/ddr_overlays/stream/podium")' class="link-primary link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">Podium (1920x800)</a></td>
+                <td>Top 3 pilots of the leaderboard</td>
+                <td>Race class</td>
+            </tr>
+        </tbody>
+    </table>
+    </div>
+
+    <div class="text-center mb-5">
+
+        <h3>DDR Node Overlays (960x600):</h3>
+        <p><a href="/ddr_overlays/stream/node/1" target="_blank" class="link-primary link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">Pilot Live + Avatar - Node 1</a></p>
+        <p><a href="/ddr_overlays/stream/node/2" target="_blank" class="link-primary link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">Pilot Live + Avatar - Node 2</a></p>
+        <p><a href="/ddr_overlays/stream/node/3" target="_blank" class="link-primary link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">Pilot Live + Avatar - Node 3</a></p>
+        <p><a href="/ddr_overlays/stream/node/4" target="_blank" class="link-primary link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">Pilot Live + Avatar - Node 4</a></p>
+        <p><a href="/ddr_overlays/stream/node/5" target="_blank" class="link-primary link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">Pilot Live + Avatar - Node 5</a></p>
+        <p><a href="/ddr_overlays/stream/node/6" target="_blank" class="link-primary link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">Pilot Live + Avatar - Node 6</a></p>
+        <p><a href="/ddr_overlays/stream/node/7" target="_blank" class="link-primary link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">Pilot Live + Avatar - Node 7</a></p>
+        <p><a href="/ddr_overlays/stream/node/8" target="_blank" class="link-primary link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">Pilot Live + Avatar - Node 8</a></p>
+
+    </div>
+
+    <style>
+        header {
+            text-align: center;
+            padding: 10px 0;
+            background-color: #00112d;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", "Liberation Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+            padding: 0;
+            margin: 0;
+            /*background-color: #0f0f0f;
+            color: #efefef;
+            */
+        }
+
+        a {
+
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        hr {
+            border: 0;
+            border-top: 1px solid #ccc;
+            margin: 20px 0;
+            width: 100%;
+        }
+
+        .btn {
+            background-color: #4a34d5;
+            border: 0;
+            color: #fff;
+            padding: 16px 20px;
+            border-radius: 6px;
+        }
+
+        .btn-success {
+            background-color: #2ecc71;
+        }
+
+        .btn-danger {
+            background-color: #e74c3c;
+        }
+
+        .p-2 {
+            padding: 10px;
+        }
+
+        .mb-5 {
+            margin-bottom: 50px;
+        }
+
+        .notification {
+            padding: 10px;
+            border-radius: 6px;
+            ;
+            background-color: #ccc;
+        }
+
+        .notification-danger {
+            background-color: #e74c3c;
+            color: #fff;
+        }
+
+        .bottom {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            margin-left: -20px;
+        }
+
+        #popup_bg {
+            position: absolute;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.6);
+        }
+
+        #result_popup, #scan_popup {
+            position: absolute;
+            background-color: #fff;
+            width: calc(100% - 60px);
+            margin: 10px;
+            padding: 20px;
+            border-radius: 6px;
+            /* height: calc(100vh - 60px); */
+        }
+
+        #result_popup {
+            /* display: none; */
+        }
+
+        #scan_popup {
+             display: none;
+             height: calc(100vh - 260px);
+        }
+
+        #popup_bg {
+            display: none;
+        }
+
+        #reader {
+            width: 100%;
+            min-height: calc(60vh - 60px);
+            /* height: calc(60vh - 60px); */
+            background-color: #ccc;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .fpvscores_data_avatar {
+            width: 86px;
+            height: 86px;
+            float: left;
+        }
+
+        .fpvscores_data_pilot {
+            float: left;
+            padding-left: 20px;
+            padding-top: 20px;
+            width: calc(100% - 128px);
+            height: 86px;
+        }
+
+        .fpvscores_data_avatar img {
+            border-radius: 50%;
+            width: 100%;
+        }
+
+        #fpvscores_data_pilot_name {
+
+        }
+
+        #fpvscores_data_pilot_callsign {
+            font-size: 18px;
+            font-weight: 700;
+        }
+    </style>
+
+</body>
+
+</html>

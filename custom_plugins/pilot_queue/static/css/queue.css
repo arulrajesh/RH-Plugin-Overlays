@@ -1,0 +1,680 @@
+/* Pilot Queue - Shared Styles */
+
+/* ============================================
+   KIOSK PAGE
+   ============================================ */
+body.kiosk {
+    margin: 0;
+    padding: 0;
+    background: #e8e8e8;
+    color: #222;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* Header */
+.kiosk-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
+    background: #fff;
+    border-bottom: 2px solid #ccc;
+}
+
+.kiosk-title {
+    font-size: 26px;
+    font-weight: 700;
+    color: #111;
+}
+
+.kiosk-event {
+    font-size: 15px;
+    color: #666;
+}
+
+.kiosk-status {
+    font-size: 14px;
+    color: #4caf50;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.kiosk-status .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #4caf50;
+    animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+/* ---- Section headings ---- */
+.section-title {
+    font-size: 20px;
+    font-weight: 700;
+    text-align: center;
+    padding: 10px 20px 6px;
+    color: #111;
+}
+
+/* ============================================
+   CURRENTLY RUNNING
+   ============================================ */
+.current-heat-section {
+    padding: 0 20px 10px;
+}
+
+.current-heat-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.current-heat-table th {
+    background: #1a237e;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    padding: 8px 6px;
+    text-align: center;
+    border: 1px solid #111;
+}
+
+.current-heat-table th.round-col {
+    width: 80px;
+    background: #e0e0e0;
+    color: #333;
+}
+
+.current-heat-table td {
+    padding: 8px 6px;
+    text-align: center;
+    font-size: 15px;
+    font-weight: 600;
+    border: 1px solid #bbb;
+}
+
+.current-heat-table td.round-cell {
+    background: #e0e0e0;
+    color: #333;
+    font-weight: 700;
+}
+
+.current-heat-table td.pilot-filled {
+    background: #2e7d32;
+    color: #fff;
+}
+
+.current-heat-table td.pilot-empty {
+    background: #999;
+    color: #fff;
+    font-style: italic;
+}
+
+.no-current-heat {
+    text-align: center;
+    padding: 12px;
+    color: #888;
+    font-style: italic;
+}
+
+/* ============================================
+   QUEUED PILOTS GRID (ZippyQ style)
+   ============================================ */
+.queue-section {
+    padding: 0 20px 10px;
+}
+
+.queue-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.queue-table th {
+    background: #e0e0e0;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 4px 6px;
+    text-align: center;
+    border: 1px solid #bbb;
+    color: #333;
+}
+
+.queue-table th.round-col {
+    width: 80px;
+}
+
+/* Add Pilot button row */
+.queue-table .add-pilot-row td {
+    padding: 6px;
+    border: 1px solid #bbb;
+    background: #f0f0f0;
+}
+
+.add-pilot-btn {
+    display: block;
+    width: 100%;
+    padding: 10px 4px;
+    background: #2e7d32;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.add-pilot-btn:hover {
+    background: #1b5e20;
+}
+
+.add-pilot-btn:active {
+    transform: scale(0.97);
+}
+
+/* Slot info row (count) */
+.queue-table .slot-info-row td {
+    padding: 4px 6px;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    border: 1px solid #bbb;
+    background: #e0e0e0;
+    color: #555;
+    font-style: italic;
+}
+
+/* Queue cells */
+.queue-table td {
+    padding: 6px;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 600;
+    border: 1px solid #bbb;
+}
+
+.queue-table td.round-cell {
+    background: #e0e0e0;
+    color: #333;
+    font-weight: 700;
+    font-size: 13px;
+}
+
+.queue-table td.q-filled {
+    background: #c62828;
+    color: #fff;
+}
+
+.queue-table td.q-empty {
+    background: #8d6e63;
+    color: #fff;
+    font-style: italic;
+}
+
+/* ============================================
+   COMPLETED HEATS
+   ============================================ */
+.completed-section {
+    padding: 0 20px 20px;
+}
+
+.completed-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.completed-table th {
+    background: #37474f;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 6px;
+    text-align: center;
+    border: 1px solid #555;
+}
+
+.completed-table th.round-col {
+    width: 80px;
+}
+
+.completed-table td {
+    padding: 6px;
+    text-align: center;
+    font-size: 14px;
+    border: 1px solid #bbb;
+    background: #f5f5f5;
+}
+
+.completed-table td.round-cell {
+    background: #cfd8dc;
+    font-weight: 700;
+    color: #333;
+}
+
+.completed-table td.result-cell {
+    font-weight: 600;
+}
+
+.show-prev-btn {
+    display: block;
+    margin: 10px auto;
+    padding: 10px 24px;
+    background: #2e7d32;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.show-prev-btn:hover {
+    background: #1b5e20;
+}
+
+/* ============================================
+   SPOTLIGHT SEARCH MODAL
+   ============================================ */
+.spotlight-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 100;
+    justify-content: center;
+    align-items: flex-start;
+    padding-top: 80px;
+}
+
+.spotlight-overlay.active {
+    display: flex;
+}
+
+.spotlight-panel {
+    background: #1a1a2e;
+    border: 1px solid #333;
+    border-radius: 16px;
+    width: 94%;
+    max-width: 700px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    overflow: hidden;
+}
+
+.spotlight-header {
+    display: flex;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid #333;
+    gap: 12px;
+}
+
+.spotlight-header .slot-badge {
+    background: #2e7d32;
+    color: #fff;
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.spotlight-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #fff;
+    font-size: 20px;
+    font-weight: 500;
+    padding: 0;
+}
+
+.spotlight-input::placeholder {
+    color: #666;
+}
+
+.spotlight-close {
+    background: none;
+    border: none;
+    color: #666;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+}
+
+.spotlight-close:hover {
+    color: #fff;
+}
+
+.spotlight-list {
+    overflow-y: auto;
+    padding: 12px;
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+    align-content: start;
+}
+
+.spotlight-pilot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 14px 8px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.1s, transform 0.1s;
+    background: #2e7d32;
+    text-align: center;
+    min-height: 60px;
+}
+
+.spotlight-pilot:hover {
+    background: #1b5e20;
+}
+
+.spotlight-pilot:active {
+    transform: scale(0.95);
+}
+
+.spotlight-pilot .sp-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.2;
+    word-break: break-word;
+}
+
+.spotlight-pilot .sp-info {
+    font-size: 11px;
+    font-weight: 500;
+    color: #a5d6a7;
+    margin-top: 4px;
+}
+
+.spotlight-pilot.ineligible {
+    background: #37374a;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.spotlight-pilot.ineligible .sp-name {
+    color: #999;
+}
+
+.spotlight-pilot.ineligible .sp-info {
+    color: #f44336;
+}
+
+.spotlight-pilot.ineligible:hover {
+    background: #37374a;
+}
+
+.spotlight-pilot.ineligible:active {
+    transform: none;
+}
+
+.spotlight-empty {
+    text-align: center;
+    padding: 24px;
+    color: #666;
+    font-style: italic;
+    grid-column: 1 / -1;
+}
+
+/* Toast notification */
+.toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    padding: 16px 32px;
+    border-radius: 10px;
+    font-size: 18px;
+    font-weight: 600;
+    z-index: 200;
+    transition: transform 0.3s ease;
+    pointer-events: none;
+}
+
+.toast.show {
+    transform: translateX(-50%) translateY(0);
+}
+
+.toast.success {
+    background: #1b5e20;
+    color: #a5d6a7;
+    border: 1px solid #4caf50;
+}
+
+.toast.error {
+    background: #7f1d1d;
+    color: #ef9a9a;
+    border: 1px solid #f44336;
+}
+
+/* ============================================
+   ADMIN PAGE
+   ============================================ */
+body.admin {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    padding: 20px;
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.admin-header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.admin-header h1 {
+    font-size: 28px;
+    margin-bottom: 4px;
+}
+
+.admin-header p {
+    color: #666;
+    font-size: 14px;
+}
+
+.admin-section {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.admin-section h3 {
+    margin-top: 0;
+    margin-bottom: 16px;
+    font-size: 18px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 8px;
+}
+
+.form-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+    gap: 12px;
+}
+
+.form-row label {
+    min-width: 180px;
+    font-weight: 500;
+    font-size: 14px;
+}
+
+.form-row input,
+.form-row select {
+    padding: 8px 12px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 14px;
+    width: 200px;
+}
+
+.form-row .hint {
+    font-size: 12px;
+    color: #888;
+    margin-left: 8px;
+}
+
+.admin-btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-right: 8px;
+}
+
+.admin-btn.primary {
+    background: #4a34d5;
+    color: #fff;
+}
+
+.admin-btn.primary:hover {
+    background: #3a24c5;
+}
+
+.admin-btn.success {
+    background: #2ecc71;
+    color: #fff;
+}
+
+.admin-btn.success:hover {
+    background: #27ae60;
+}
+
+.admin-btn.danger {
+    background: #e74c3c;
+    color: #fff;
+}
+
+.admin-btn.danger:hover {
+    background: #c0392b;
+}
+
+.admin-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Admin queue overview */
+.admin-slots {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.admin-slot {
+    flex: 1;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 12px;
+}
+
+.admin-slot h4 {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    color: #666;
+}
+
+.admin-slot-pilot {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    font-size: 14px;
+    border-bottom: 1px solid #eee;
+}
+
+.admin-slot-pilot .remove-btn {
+    background: none;
+    border: none;
+    color: #e74c3c;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 2px 6px;
+}
+
+/* Stats table */
+.stats-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.stats-table th,
+.stats-table td {
+    border: 1px solid #ddd;
+    padding: 8px 12px;
+    text-align: left;
+}
+
+.stats-table th {
+    background: #f5f5f5;
+    font-weight: 600;
+}
+
+/* Admin status message */
+.admin-message {
+    padding: 10px 16px;
+    border-radius: 6px;
+    margin-bottom: 16px;
+    font-size: 14px;
+    display: none;
+}
+
+.admin-message.success {
+    display: block;
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.admin-message.error {
+    display: block;
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+/* Kiosk link */
+.kiosk-link {
+    display: inline-block;
+    padding: 10px 20px;
+    background: #0a0a1e;
+    color: #fff;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 14px;
+    margin-top: 10px;
+}
+
+.kiosk-link:hover {
+    background: #1a1a3a;
+}

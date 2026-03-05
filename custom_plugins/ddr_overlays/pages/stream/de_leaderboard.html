@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="RotorHazard">
+    <meta name="google" content="notranslate">
+    <title>DE Leaderboard</title>
+
+    <!-- Icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/image/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/image/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/image/favicon-16x16.png">
+    <link rel="manifest" href="/static/image/site.webmanifest">
+    <link rel="mask-icon" href="/static/image/safari-pinned-tab.svg" color="#ee7a28">
+    <link rel="shortcut icon" href="/static/image/favicon.ico">
+    <meta name="msapplication-TileColor" content="#ee7a28">
+    <meta name="msapplication-config" content="/static/image/browserconfig.xml">
+    <meta name="theme-color" content="#224873">
+
+    <!-- Scripts -->
+    <script type="text/javascript" src="/static/jquery-3.6.4/jquery-3.6.4.min.js"></script>
+    <script type="text/javascript" src="/static/articulate/articulate.min.js"></script>
+    <script type="text/javascript" src="/static/socket.io-4.6.1/socket.io.min.js"></script>
+    <script type="text/javascript" src="/static/smoothie/smoothie.js"></script>
+    <script type="text/javascript" src="/static/magnific-1.1.0/magnific-inline-min.js"></script>
+    <script type="text/javascript" src="/static/svgasset.js"></script>
+    <script type="text/javascript" src="/static/rotorhazard.js"></script>
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="/static/magnific-1.1.0/magnific-popup.css">
+    <link rel="stylesheet" href="/static/stream.css">
+    <link rel="stylesheet" href="/ddr_overlays/static/fonts/teko/stylesheet.css">
+    <link rel="stylesheet" href="/ddr_overlays/static/css/ddr_overlays.css">
+
+</head>
+
+<body>
+
+<script type="text/javascript" charset="utf-8" src="/ddr_overlays/static/js/ddr_settings.js"></script>
+<script type="text/javascript" charset="utf-8" src="/ddr_overlays/static/js/ddr_overlays.js"></script>
+
+<script type="text/javascript" charset="utf-8">
+
+    /* ============================================
+       DATA DEPENDENCIES
+       ============================================ */
+    var data_dependencies = [
+        'all_languages',
+        'language',
+        'pilot_data',
+        'result_data',
+        'heat_data',
+        'current_heat',
+        'class_data',
+        'race_status',
+        'leaderboard'
+    ];
+
+    rotorhazard.show_messages = false;
+
+    /* ============================================
+       TEMPLATE VARIABLES
+       ============================================ */
+    var seeding_class_id = {{ seeding_class_id }};
+    var de_class_id = {{ de_class_id }};
+    var portrait_mode = {{ portrait|lower }};
+
+    /* ============================================
+       STATE VARIABLES
+       ============================================ */
+    var ddr_pilot_data = [];
+    var ddr_result_data = null;
+    var ddr_heat_data = [];      // array of heat objects from heat_data event
+    var ddr_class_data = null;
+    var current_heat_class = null;
+    var current_heat_name = '';
+    var current_mode = 'seeding'; // 'seeding' or 'de'
+
+    // Portrait pagination
+    var portrait_page = 0;        // current page index (0 = positions 1-8, 1 = positions 9-16)
+    var portrait_timer = null;
+    var PORTRAIT_PAGE_DURATION = 8000;  // ms before switching pages
+
+    // Final 4 live tracking (Race 14 with multiple rounds)
+    var final4_heat_id = null;
+    var final4_round_results = [];  // [{pilot_id: finish_position, ...}, ...] per round
+    var final4_saved_count = 0;     // how many rounds confirmed saved in result_data
+
+    /* ============================================
+       BRACKET DEFINITION - 16-pilot Double Elimination
+
+       Races 1-4:  Winner Bracket Round 1 (seeded)
+       Races 5,7:  Lower Bracket Round 2 (eliminates 13th-16th)
+       Races 6,8:  Winner Bracket Round 2
+       Races 9,10: Lower Bracket Round 3 (eliminates 9th-12th)
+       Race 11:    Winner Bracket Semi-final
+       Race 12:    Lower Bracket Round 4 (eliminates 7th-8th)
+       Race 13:    Lower Bracket Round 5 (eliminates 5th-6th)
+       Race 14+:   Final 4 (first to 2 wins, multiple rounds)
+       ============================================ */
+
+    // Elimination rules: race_number -> [3rd_place_gets, 4th_place_gets]
+    var ELIMINATION_RULES = {
+        5:  [15, 16],
+        7:  [13, 14],
+        9:  [11, 12],
+        10: [9, 10],
+        12: [7, 8],
+        13: [5, 6]
+    };
+
+    /* ============================================
+       UTILITY FUNCTIONS
+       ============================================ */
+    function race_kickoff(msg) {
+        rotorhazard.timer.stopAll();
+    }
+
+    function getOrdinal(n) {
+        var s = ['th', 'st', 'nd', 'rd'];
+        var v = n % 100;
+        return (s[(v - 20) % 10] || s[v] || s[0]);
+    }
+
+    /* ============================================
+       DATA PROCESSING FUNCTIONS
+       ============================================ */
+
+    // Build mapping: race_number -> heat_id for the DE class
+    function buildRaceMap() {
+        var map = {};
+        for (var i = 0; i < ddr_heat_data.length; i++) {
+            var heat = ddr_heat_data[i];
+            if (heat.class_id == de_class_id) {
+                var name = heat.displayname || heat.name || '';
+                var match = name.match(/Race\s+(\d+)/i);
+                if (match) {
+                    var raceNum = parseInt(match[1]);
+                    map[raceNum] = heat.id;
+                    if (raceNum === 14) {
+                        final4_heat_id = heat.id;
+                    }
+                }
+            }
+        }
+        return map;
+    }
+
+    // Build seed map: pilot_id -> seed number (from seeding class leaderboard)
+    function buildSeedMap() {
+        var map = {};
+        if (!ddr_result_data || !ddr_result_data.classes) return map;
+
+        var cls = ddr_result_data.classes[seeding_class_id];
+        if (!cls || !cls.leaderboard) return map;
+
+        // Prefer by_consecutives for seeding (fastest 3 consecutive laps)
+        var lb_type = 'by_consecutives';
+        var lb = cls.leaderboard[lb_type];
+        if (!lb || lb.length === 0) {
+            lb_type = cls.leaderboard.meta.primary_leaderboard;
+            lb = cls.leaderboard[lb_type];
+        }
+        if (!lb) return map;
+
+        for (var i = 0; i < lb.length; i++) {
+            map[lb[i].pilot_id] = i + 1;
+        }
+        return map;
+    }
+
+    // Try to extract per-round results for Final 4 from result_data
+    function extractFinal4FromResultData() {
+        if (!ddr_result_data || !ddr_result_data.heats || !final4_heat_id) return;
+
+        var heat_result = ddr_result_data.heats[final4_heat_id];
+        if (!heat_result) return;
+
+        // Log structure for debugging
+        console.log('[DE Leaderboard] Final 4 heat data keys:', Object.keys(heat_result));
+
+        // Approach 1: Look for rounds array/object
+        if (heat_result.rounds) {
+            console.log('[DE Leaderboard] Found rounds in result_data');
+            var extracted = [];
+            var rounds = heat_result.rounds;
+            var round_list = Array.isArray(rounds) ? rounds : Object.values(rounds);
+
+            for (var ri = 0; ri < round_list.length; ri++) {
+                var round = round_list[ri];
+                if (round && round.leaderboard) {
+                    var lb_type = round.leaderboard.meta
+                        ? round.leaderboard.meta.primary_leaderboard
+                        : 'by_race_time';
+                    var lb = round.leaderboard[lb_type];
+                    if (lb && lb.length > 0) {
+                        var round_result = {};
+                        for (var pi = 0; pi < lb.length; pi++) {
+                            round_result[lb[pi].pilot_id] = lb[pi].position;
+                        }
+                        extracted.push(round_result);
+                    }
+                }
+            }
+
+            if (extracted.length > 0) {
+                final4_round_results = extracted;
+                final4_saved_count = extracted.length;
+                console.log('[DE Leaderboard] Extracted ' + extracted.length + ' Final 4 rounds');
+                return;
+            }
+        }
+
+        // Approach 2: Check if heat leaderboard has round-level info
+        // (RotorHazard may structure this differently)
+        if (heat_result.leaderboard) {
+            var lb_type = heat_result.leaderboard.meta.primary_leaderboard;
+            var lb = heat_result.leaderboard[lb_type];
+            if (lb && lb.length > 0) {
+                // If we have no live data yet, and the heat has results,
+                // we know at least 1 round has been completed.
+                // Use aggregate as fallback for a single round.
+                if (final4_round_results.length === 0) {
+                    var round_result = {};
+                    for (var pi = 0; pi < lb.length; pi++) {
+                        round_result[lb[pi].pilot_id] = lb[pi].position;
+                    }
+                    final4_round_results = [round_result];
+                    final4_saved_count = 1;
+                    console.log('[DE Leaderboard] Using aggregate leaderboard as single round fallback');
+                }
+            }
+        }
+    }
+
+    // Process all DE results and determine standings
+    function processDEStandings() {
+        var standings = {}; // position -> {pilot_id, callsign, seed, determined_by}
+
+        if (!ddr_result_data || !ddr_result_data.heats) return standings;
+
+        var race_map = buildRaceMap();
+        var seed_map = buildSeedMap();
+
+        // Build callsign lookup from pilot_data
+        var callsigns = {};
+        for (var pi = 0; pi < ddr_pilot_data.length; pi++) {
+            callsigns[ddr_pilot_data[pi].pilot_id] = ddr_pilot_data[pi].callsign;
+        }
+
+        // --- Process elimination races (positions 5-16) ---
+        for (var race_num_str in ELIMINATION_RULES) {
+            var race_num = parseInt(race_num_str);
+            var heat_id = race_map[race_num];
+            if (!heat_id) continue;
+
+            var heat_result = ddr_result_data.heats[heat_id];
+            if (!heat_result || !heat_result.leaderboard) continue;
+
+            var lb_type = heat_result.leaderboard.meta.primary_leaderboard;
+            var lb = heat_result.leaderboard[lb_type];
+            if (!lb || lb.length === 0) continue;
+
+            var positions = ELIMINATION_RULES[race_num];
+
+            for (var j = 0; j < lb.length; j++) {
+                var entry = lb[j];
+                var pilot_name = entry.callsign || callsigns[entry.pilot_id] || getPilotCallsign(entry.pilot_id) || '?';
+                if (entry.position == 3) {
+                    standings[positions[0]] = {
+                        pilot_id: entry.pilot_id,
+                        callsign: pilot_name,
+                        seed: seed_map[entry.pilot_id] || '?',
+                        determined_by: 'Race ' + race_num
+                    };
+                } else if (entry.position == 4) {
+                    standings[positions[1]] = {
+                        pilot_id: entry.pilot_id,
+                        callsign: pilot_name,
+                        seed: seed_map[entry.pilot_id] || '?',
+                        determined_by: 'Race ' + race_num
+                    };
+                }
+            }
+        }
+
+        // --- Process Final 4 (Race 14 - first to 2 wins) ---
+        if (final4_round_results.length > 0) {
+            var wins = {};
+            var finishes = {};
+
+            for (var ri = 0; ri < final4_round_results.length; ri++) {
+                var round = final4_round_results[ri];
+                for (var pid in round) {
+                    var pid_int = parseInt(pid);
+                    if (!wins[pid_int]) wins[pid_int] = 0;
+                    if (!finishes[pid_int]) finishes[pid_int] = [];
+                    finishes[pid_int].push(round[pid]);
+                    if (round[pid] == 1) {
+                        wins[pid_int]++;
+                    }
+                }
+            }
+
+            // Check for winner (first pilot to reach 2 wins)
+            var winner = null;
+            for (var pid in wins) {
+                if (wins[pid] >= 2 && !winner) {
+                    winner = parseInt(pid);
+                }
+            }
+
+            if (winner) {
+                // 1st place: the winner
+                standings[1] = {
+                    pilot_id: winner,
+                    callsign: callsigns[winner] || getPilotCallsign(winner) || '?',
+                    seed: seed_map[winner] || '?',
+                    determined_by: 'Final (2 wins)'
+                };
+
+                // 2nd-4th: by combined finish positions (lowest total = best)
+                // Tiebreaker: motocross style (better last race position)
+                var remaining = [];
+                for (var rpid in finishes) {
+                    var rpid_int = parseInt(rpid);
+                    if (rpid_int === winner) continue;
+                    var total = finishes[rpid].reduce(function(a, b) { return a + b; }, 0);
+                    var last_pos = finishes[rpid][finishes[rpid].length - 1];
+                    remaining.push({
+                        pilot_id: rpid_int,
+                        callsign: callsigns[rpid_int] || getPilotCallsign(rpid_int) || '?',
+                        seed: seed_map[rpid_int] || '?',
+                        total: total,
+                        last_race_pos: last_pos
+                    });
+                }
+
+                // Sort: lowest combined total first; tiebreaker: best last race
+                remaining.sort(function(a, b) {
+                    if (a.total !== b.total) return a.total - b.total;
+                    return a.last_race_pos - b.last_race_pos;
+                });
+
+                for (var ri = 0; ri < remaining.length; ri++) {
+                    standings[ri + 2] = {
+                        pilot_id: remaining[ri].pilot_id,
+                        callsign: remaining[ri].callsign,
+                        seed: remaining[ri].seed,
+                        determined_by: 'Final'
+                    };
+                }
+            }
+        }
+
+        return standings;
+    }
+
+    // Get Final 4 status for live display
+    function getFinal4Status() {
+        if (final4_round_results.length === 0) return null;
+
+        var wins = {};
+        var callsigns = {};
+        for (var pi = 0; pi < ddr_pilot_data.length; pi++) {
+            callsigns[ddr_pilot_data[pi].pilot_id] = ddr_pilot_data[pi].callsign;
+        }
+
+        // Collect all pilot IDs from all rounds
+        var all_pilots = {};
+        for (var ri = 0; ri < final4_round_results.length; ri++) {
+            var round = final4_round_results[ri];
+            for (var pid in round) {
+                var pid_int = parseInt(pid);
+                if (!wins[pid_int]) wins[pid_int] = 0;
+                if (round[pid] === 1) {
+                    wins[pid_int]++;
+                }
+                all_pilots[pid_int] = true;
+            }
+        }
+
+        var pilots = [];
+        for (var pid in all_pilots) {
+            var pid_int = parseInt(pid);
+            pilots.push({
+                pilot_id: pid_int,
+                callsign: callsigns[pid_int] || 'Pilot ' + pid,
+                wins: wins[pid_int] || 0
+            });
+        }
+
+        // Sort by wins descending
+        pilots.sort(function(a, b) { return b.wins - a.wins; });
+
+        var winner = null;
+        for (var i = 0; i < pilots.length; i++) {
+            if (pilots[i].wins >= 2) {
+                winner = pilots[i];
+                break;
+            }
+        }
+
+        return {
+            rounds_played: final4_round_results.length,
+            pilots: pilots,
+            winner: winner
+        };
+    }
+
+    // Detect current mode (seeding vs DE)
+    function detectMode() {
+        // If DE class has any saved race results -> DE mode
+        if (ddr_result_data && ddr_result_data.heats) {
+            var race_map = buildRaceMap();
+            for (var rn in race_map) {
+                var hid = race_map[rn];
+                if (ddr_result_data.heats[hid] && ddr_result_data.heats[hid].leaderboard) {
+                    return 'de';
+                }
+            }
+        }
+
+        // If current heat belongs to DE class
+        if (current_heat_class == de_class_id) {
+            return 'de';
+        }
+
+        return 'seeding';
+    }
+
+    /* ============================================
+       RENDER FUNCTIONS
+       ============================================ */
+
+    // Helper: get pilot callsign by pilot_id from ddr_pilot_data
+    function getPilotCallsign(pilot_id) {
+        for (var i = 0; i < ddr_pilot_data.length; i++) {
+            if (ddr_pilot_data[i].pilot_id == pilot_id) {
+                return ddr_pilot_data[i].callsign;
+            }
+        }
+        return null;
+    }
+
+    function getSeedingLeaderboard() {
+        if (!ddr_result_data || !ddr_result_data.classes) return null;
+        var cls = ddr_result_data.classes[seeding_class_id];
+        if (!cls) return null;
+
+        var lb;
+        if (cls.leaderboard) {
+            if (cls.leaderboard.by_consecutives && cls.leaderboard.by_consecutives.length > 0) {
+                lb = cls.leaderboard.by_consecutives;
+            } else {
+                var lb_type = cls.leaderboard.meta.primary_leaderboard;
+                lb = cls.leaderboard[lb_type];
+            }
+        } else if (cls.ranking) {
+            lb = cls.ranking.ranking;
+        }
+
+        return (lb && lb.length > 0) ? lb : null;
+    }
+
+    function buildSeedingTable(lb, start, count) {
+        var end = Math.min(start + count, lb.length, 16);
+        var html = '<table class="de_table de_table_seeding">';
+        html += '<thead><tr>';
+        html += '<th class="de_pos">Seed</th>';
+        html += '<th class="de_avatar"></th>';
+        html += '<th class="de_flag"></th>';
+        html += '<th class="de_name">Pilot</th>';
+        html += '<th class="de_time">3-Lap Time</th>';
+        html += '</tr></thead>';
+        html += '<tbody>';
+
+        for (var i = start; i < end; i++) {
+            var entry = lb[i];
+            var pilot_name = entry.callsign || getPilotCallsign(entry.pilot_id) || '?';
+            var pilotImg = getPilotImgURL({callsign: pilot_name});
+            var flagImg = getFlagURL(entry.pilot_id, ddr_pilot_data);
+
+            var time_display = '&#8212;';
+            if (entry.consecutives_raw && entry.consecutives_raw > 0) {
+                time_display = entry.consecutives;
+            } else if (entry.total_time_raw && entry.total_time_raw > 0) {
+                time_display = entry.total_time;
+            }
+
+            html += '<tr class="de_determined">';
+            html += '<td class="de_pos">' + (i + 1) + '</td>';
+            html += '<td class="de_avatar"><img src="' + pilotImg + '"></td>';
+            html += '<td class="de_flag"><img src="' + flagImg + '"></td>';
+            html += '<td class="de_name">' + pilot_name + '</td>';
+            html += '<td class="de_time">' + time_display + '</td>';
+            html += '</tr>';
+        }
+
+        html += '</tbody></table>';
+        return html;
+    }
+
+    function renderSeeding() {
+        var lb = getSeedingLeaderboard();
+        if (!lb) {
+            $('#de_standings').html('<div class="de_no_data">Waiting for seeding data...</div>');
+            return;
+        }
+
+        if (portrait_mode) {
+            var total = Math.min(lb.length, 16);
+            var pages = Math.ceil(total / 8);
+            var start = portrait_page * 8;
+            if (start >= total) { portrait_page = 0; start = 0; }
+
+            var html = '<div class="de_page_content">';
+            html += buildSeedingTable(lb, start, 8);
+            html += '</div>';
+            if (pages > 1) {
+                html += buildPageIndicator(pages, portrait_page);
+            }
+            $('#de_standings').html(html);
+        } else {
+            $('#de_standings').html(buildSeedingTable(lb, 0, 16));
+        }
+    }
+
+    function buildFinal4Banner() {
+        var final4 = getFinal4Status();
+        if (!final4) return '';
+
+        var html = '';
+        if (!final4.winner) {
+            html = '<div id="de_final4_status">';
+            html += '<div class="final4_title">Final 4 &mdash; Round ' + final4.rounds_played + '</div>';
+            html += '<div class="final4_pilots">';
+            for (var fi = 0; fi < final4.pilots.length; fi++) {
+                var fp = final4.pilots[fi];
+                html += '<span class="final4_pilot">';
+                html += '<span class="final4_name">' + fp.callsign + '</span> ';
+                for (var wi = 0; wi < fp.wins; wi++) {
+                    html += '<span class="final4_star">&#9733;</span>';
+                }
+                if (fp.wins === 0) {
+                    html += '<span class="final4_no_wins">0</span>';
+                }
+                html += '</span>';
+            }
+            html += '</div>';
+            html += '</div>';
+        } else {
+            html = '<div id="de_final4_status" class="final4_complete">';
+            html += '<div class="final4_title">Final Complete</div>';
+            html += '<div class="final4_winner">' + final4.winner.callsign + ' wins!</div>';
+            html += '</div>';
+        }
+        return html;
+    }
+
+    function buildPageIndicator(total_items, active_page) {
+        var start = active_page * 8 + 1;
+        var end = Math.min(start + 7, total_items);
+        var html = '<div class="de_page_indicator">';
+        html += 'Showing ' + start + '-' + end + ' of ' + total_items;
+        html += '</div>';
+        return html;
+    }
+
+    function renderDE() {
+        var standings = processDEStandings();
+        var final4_html = buildFinal4Banner();
+
+        if (portrait_mode) {
+            var start = portrait_page * 8 + 1;
+            var end = start + 7;
+            if (start > 16) { portrait_page = 0; start = 1; end = 8; }
+
+            var html = final4_html;
+            html += '<div class="de_page_content">';
+            html += buildStandingsColumn(standings, start, end);
+            html += '</div>';
+            html += buildPageIndicator(2, portrait_page);
+            $('#de_standings').html(html);
+        } else {
+            var html = final4_html;
+            html += '<div class="de_columns">';
+            html += '<div class="de_column">';
+            html += buildStandingsColumn(standings, 1, 8);
+            html += '</div>';
+            html += '<div class="de_column">';
+            html += buildStandingsColumn(standings, 9, 16);
+            html += '</div>';
+            html += '</div>';
+            $('#de_standings').html(html);
+        }
+    }
+
+    function buildStandingsColumn(standings, start, end) {
+        var html = '<table class="de_table">';
+        html += '<thead><tr>';
+        html += '<th class="de_pos">Pos</th>';
+        html += '<th class="de_avatar"></th>';
+        html += '<th class="de_name">Pilot</th>';
+        html += '<th class="de_seed">Seed</th>';
+        html += '</tr></thead>';
+        html += '<tbody>';
+
+        for (var pos = start; pos <= end; pos++) {
+            var entry = standings[pos];
+
+            if (entry) {
+                var pilot_name = entry.callsign || getPilotCallsign(entry.pilot_id) || '?';
+                var pilotImg = getPilotImgURL({callsign: pilot_name});
+
+                var posClass = 'de_determined';
+                if (pos === 1) posClass += ' de_pos_gold';
+                else if (pos === 2) posClass += ' de_pos_silver';
+                else if (pos === 3) posClass += ' de_pos_bronze';
+
+                html += '<tr class="' + posClass + '">';
+                html += '<td class="de_pos">' + pos + '<sup>' + getOrdinal(pos) + '</sup></td>';
+                html += '<td class="de_avatar"><img src="' + pilotImg + '"></td>';
+                html += '<td class="de_name">' + pilot_name + '</td>';
+                html += '<td class="de_seed">#' + entry.seed + '</td>';
+                html += '</tr>';
+            } else {
+                html += '<tr class="de_undetermined">';
+                html += '<td class="de_pos">' + pos + '<sup>' + getOrdinal(pos) + '</sup></td>';
+                html += '<td class="de_avatar"></td>';
+                html += '<td class="de_name">---</td>';
+                html += '<td class="de_seed"></td>';
+                html += '</tr>';
+            }
+        }
+
+        html += '</tbody></table>';
+        return html;
+    }
+
+    // Stagger-show rows after rendering (DDS-style: 100ms per row)
+    function showRows() {
+        var rows = document.querySelectorAll('.de_table tbody tr');
+        rows.forEach(function (row, index) {
+            setTimeout(function () {
+                row.classList.add('show');
+            }, 100 * index);
+        });
+    }
+
+    // Stagger-hide rows, returns a Promise that resolves when done
+    function hideRows() {
+        return new Promise(function (resolve) {
+            var rows = document.querySelectorAll('.de_table tbody tr');
+            if (rows.length === 0) { resolve(); return; }
+            rows.forEach(function (row, index) {
+                setTimeout(function () {
+                    row.classList.add('hide');
+                }, 100 * index);
+            });
+            setTimeout(resolve, 100 * rows.length + 500);
+        });
+    }
+
+    // Portrait page cycling
+    function startPortraitCycle() {
+        if (portrait_timer) clearInterval(portrait_timer);
+        if (!portrait_mode) return;
+
+        portrait_timer = setInterval(function () {
+            hideRows().then(function () {
+                var total_pages = 2;
+                if (current_mode === 'seeding') {
+                    var lb = getSeedingLeaderboard();
+                    if (lb) total_pages = Math.ceil(Math.min(lb.length, 16) / 8);
+                }
+                portrait_page = (portrait_page + 1) % total_pages;
+
+                if (current_mode === 'seeding') renderSeeding();
+                else renderDE();
+
+                showRows();
+            });
+        }, PORTRAIT_PAGE_DURATION);
+    }
+
+    // Main display update
+    function updateDisplay() {
+        current_mode = detectMode();
+
+        if (portrait_mode) {
+            $('#de_title_text').text('Leaderboard');
+            $('#de_subtitle').text('');
+        } else if (current_mode === 'seeding') {
+            $('#de_title_text').text('Seeding Leaderboard');
+            $('#de_subtitle').text('Fastest 3 Consecutive Laps');
+        } else {
+            $('#de_title_text').text('Double Elimination Standings');
+            var race_info = current_heat_name || '';
+            $('#de_subtitle').text(race_info);
+        }
+
+        if (current_mode === 'seeding') {
+            renderSeeding();
+        } else {
+            renderDE();
+        }
+
+        showRows();
+    }
+
+    /* ============================================
+       SOCKET EVENT HANDLERS
+       ============================================ */
+
+    $(document).ready(function () {
+        DDR_Settings.load(function(settings) {
+            console.log('[DE Leaderboard] Settings loaded');
+        });
+
+        if (portrait_mode) {
+            startPortraitCycle();
+        }
+
+        socket.on('language', default_handler['language']);
+
+        socket.on('pilot_data', function (msg) {
+            ddr_pilot_data = msg.pilots;
+            updateDisplay();
+        });
+
+        socket.on('heat_data', function (msg) {
+            ddr_heat_data = msg.heats || [];
+            buildRaceMap();
+            updateDisplay();
+        });
+
+        socket.on('class_data', function (msg) {
+            ddr_class_data = msg.classes;
+        });
+
+        socket.on('result_data', function (msg) {
+            ddr_result_data = msg;
+            extractFinal4FromResultData();
+            updateDisplay();
+        });
+
+        socket.on('current_heat', function (msg) {
+            if (msg.heat_class) {
+                current_heat_class = msg.heat_class;
+            }
+            if (msg.displayname) {
+                current_heat_name = msg.displayname;
+            }
+            updateDisplay();
+        });
+
+        // Track live leaderboard events for Final 4 round tracking
+        socket.on('leaderboard', function (msg) {
+            var race = msg.current;
+            if (!race || !race.leaderboard) return;
+
+            var heat_name = race.displayname || '';
+
+            // Check if this is a Final 4 race (Race 14)
+            if (heat_name.match(/Race\s+14/i)) {
+                var lb_type = race.leaderboard.meta.primary_leaderboard;
+                var lb = race.leaderboard[lb_type];
+                if (lb && lb.length > 0) {
+                    // Build round result from live data
+                    var current_round = {};
+                    for (var li = 0; li < lb.length; li++) {
+                        current_round[lb[li].pilot_id] = lb[li].position;
+                    }
+
+                    // If we have more rounds than saved, this is a live (unsaved) round
+                    if (final4_round_results.length > final4_saved_count) {
+                        // Update the live round in-place
+                        final4_round_results[final4_round_results.length - 1] = current_round;
+                    } else {
+                        // Add new live round
+                        final4_round_results.push(current_round);
+                    }
+
+                    updateDisplay();
+                }
+            }
+
+            // Update subtitle with current race info
+            if (race.displayname) {
+                current_heat_name = race.displayname;
+                if (current_mode === 'de') {
+                    $('#de_subtitle').text(current_heat_name);
+                }
+            }
+        });
+
+        socket.on('race_status', default_handler['race_status']);
+    });
+
+</script>
+
+<main class="page-stream">
+
+    <div id="de_leaderboard_container">
+
+        <div id="de_header">
+            <div id="de_title_text">Double Elimination Standings</div>
+            <div id="de_subtitle"></div>
+            <div id="de_event_name">{{ getOption('eventName') }}</div>
+        </div>
+
+        <div id="de_standings">
+            <div class="de_no_data">Loading...</div>
+        </div>
+
+    </div>
+
+</main>
+
+</body>
+
+</html>

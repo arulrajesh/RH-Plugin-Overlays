@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="RotorHazard">
+    <meta name="google" content="notranslate">
+    <title>DE Bracket</title>
+
+    <!-- Icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/image/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/image/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/image/favicon-16x16.png">
+    <link rel="manifest" href="/static/image/site.webmanifest">
+    <link rel="mask-icon" href="/static/image/safari-pinned-tab.svg" color="#ee7a28">
+    <link rel="shortcut icon" href="/static/image/favicon.ico">
+    <meta name="msapplication-TileColor" content="#ee7a28">
+    <meta name="msapplication-config" content="/static/image/browserconfig.xml">
+    <meta name="theme-color" content="#224873">
+
+    <!-- Scripts -->
+    <script type="text/javascript" src="/static/jquery-3.6.4/jquery-3.6.4.min.js"></script>
+    <script type="text/javascript" src="/static/articulate/articulate.min.js"></script>
+    <script type="text/javascript" src="/static/socket.io-4.6.1/socket.io.min.js"></script>
+    <script type="text/javascript" src="/static/smoothie/smoothie.js"></script>
+    <script type="text/javascript" src="/static/magnific-1.1.0/magnific-inline-min.js"></script>
+    <script type="text/javascript" src="/static/svgasset.js"></script>
+    <script type="text/javascript" src="/static/rotorhazard.js"></script>
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="/static/magnific-1.1.0/magnific-popup.css">
+    <link rel="stylesheet" href="/static/stream.css">
+    <link rel="stylesheet" href="/ddr_overlays/static/fonts/teko/stylesheet.css">
+    <link rel="stylesheet" href="/ddr_overlays/static/css/ddr_overlays.css">
+    <link rel="stylesheet" href="/ddr_overlays/static/css/de_bracket.css">
+
+</head>
+
+<body>
+
+<script type="text/javascript" charset="utf-8" src="/ddr_overlays/static/js/ddr_settings.js"></script>
+<script type="text/javascript" charset="utf-8" src="/ddr_overlays/static/js/ddr_overlays.js"></script>
+
+<script type="text/javascript" charset="utf-8">
+
+    /* ============================================
+       DATA DEPENDENCIES
+       ============================================ */
+    var data_dependencies = [
+        'all_languages',
+        'language',
+        'pilot_data',
+        'result_data',
+        'heat_data',
+        'current_heat',
+        'class_data',
+        'race_status',
+        'leaderboard'
+    ];
+
+    rotorhazard.show_messages = false;
+
+    /* ============================================
+       TEMPLATE VARIABLES
+       ============================================ */
+    var seeding_class_id = {{ seeding_class_id }};
+    var de_class_id = {{ de_class_id }};
+
+    /* ============================================
+       STATE VARIABLES
+       ============================================ */
+    var ddr_pilot_data = [];
+    var ddr_result_data = null;
+    var ddr_heat_data = [];
+    var ddr_class_data = null;
+    var current_heat_id = null;
+    var current_heat_class = null;
+    var current_race_status = 0; // 0=waiting, 1=running, 2=stopped, 3=staging
+    var live_leaderboard = null; // live positions for active race
+
+    // Final 4 tracking
+    var final4_heat_id = null;
+    var final4_round_results = [];
+    var final4_saved_count = 0;
+
+    /* ============================================
+       ELIMINATION RULES (from de_leaderboard)
+       Race number -> [3rd_place_position, 4th_place_position]
+       ============================================ */
+    var ELIMINATION_RULES = {
+        5:  [15, 16],
+        7:  [13, 14],
+        9:  [11, 12],
+        10: [9, 10],
+        12: [7, 8],
+        13: [5, 6]
+    };
+
+    /* ============================================
+       CARD DIMENSIONS & POSITIONS
+       ============================================ */
+    var CARD_W = 220;
+    var CARD_HEADER_H = 24;
+    var CARD_PILOT_H = 24;
+    var CARD_FOOTER_H = 22;
+    var CARD_H = CARD_HEADER_H + (CARD_PILOT_H * 4) + CARD_FOOTER_H; // ~142px
+
+    // Horizontal column positions
+    var COL = [30, 310, 590, 870, 1150, 1430];
+
+    // Race card positions {x, y} - laid out for 1920x1080
+    // WB R1: 4 cards stacked, ~150px apart (142px card + 8px gap)
+    // LB: starts below WB with section gap
+    var RACE_POSITIONS = {
+        // Winners Bracket - Round 1 (Column 0)
+        1:  { x: COL[0], y: 60 },
+        2:  { x: COL[0], y: 210 },
+        3:  { x: COL[0], y: 360 },
+        4:  { x: COL[0], y: 510 },
+
+        // Winners Bracket - Round 2 (Column 1) - centered between feeder races
+        6:  { x: COL[1], y: 135 },   // between Race 1 (60) and Race 2 (210)
+        8:  { x: COL[1], y: 435 },   // between Race 3 (360) and Race 4 (510)
+
+        // Winners Bracket - Semi-final (Column 2) - centered between 6 and 8
+        11: { x: COL[2], y: 285 },
+
+        // Losers Bracket - Round 1 (Column 0, lower section)
+        5:  { x: COL[0], y: 690 },
+        7:  { x: COL[0], y: 840 },
+
+        // Losers Bracket - Round 2 (Column 1, lower)
+        9:  { x: COL[1], y: 690 },
+        10: { x: COL[1], y: 840 },
+
+        // Losers Bracket - Round 3 (Column 2, lower) - centered between 9 and 10
+        12: { x: COL[2], y: 765 },
+
+        // Losers Bracket - Round 4 (Column 3) - bridges to finals
+        13: { x: COL[3], y: 525 },
+
+        // Finals (Column 4) - centered between WB and LB paths
+        14: { x: COL[4], y: 400 }
+    };
+
+    // Results panel position
+    var RESULTS_POS = { x: COL[4] + CARD_W + 40, y: 55 };
+
+    /* ============================================
+       BRACKET TYPE MAP (for WB/LB/Final badges)
+       ============================================ */
+    var RACE_TYPE = {
+        1: 'wb', 2: 'wb', 3: 'wb', 4: 'wb',
+        6: 'wb', 8: 'wb', 11: 'wb',
+        5: 'lb', 7: 'lb', 9: 'lb', 10: 'lb',
+        12: 'lb', 13: 'lb',
+        14: 'final'
+    };
+
+    /* ============================================
+       CONNECTOR DEFINITIONS
+       Each: { from, to, fromSlots, toSlots, style }
+       fromSlots/toSlots: 'top2' = pilots 1-2 area, 'bot2' = pilots 3-4 area
+       ============================================ */
+    var CONNECTIONS = [
+        // WB R1 -> WB R2
+        { from: 1, to: 6,  fromSlots: 'top2', toSlots: 'top2', style: 'advance' },
+        { from: 2, to: 6,  fromSlots: 'top2', toSlots: 'bot2', style: 'advance' },
+        { from: 3, to: 8,  fromSlots: 'top2', toSlots: 'top2', style: 'advance' },
+        { from: 4, to: 8,  fromSlots: 'top2', toSlots: 'bot2', style: 'advance' },
+
+        // WB R2 -> WB Semi
+        { from: 6, to: 11, fromSlots: 'top2', toSlots: 'top2', style: 'advance' },
+        { from: 8, to: 11, fromSlots: 'top2', toSlots: 'bot2', style: 'advance' },
+
+        // WB Semi -> Finals
+        { from: 11, to: 14, fromSlots: 'top2', toSlots: 'top2', style: 'advance' },
+
+        // Drop to Losers: WB R1 -> LB R1
+        { from: 1, to: 5, fromSlots: 'bot2', toSlots: 'top2', style: 'drop' },
+        { from: 2, to: 5, fromSlots: 'bot2', toSlots: 'bot2', style: 'drop' },
+        { from: 3, to: 7, fromSlots: 'bot2', toSlots: 'top2', style: 'drop' },
+        { from: 4, to: 7, fromSlots: 'bot2', toSlots: 'bot2', style: 'drop' },
+
+        // Drop from WB R2 -> LB R2
+        { from: 6, to: 9,  fromSlots: 'bot2', toSlots: 'bot2', style: 'drop' },
+        { from: 8, to: 10, fromSlots: 'bot2', toSlots: 'bot2', style: 'drop' },
+
+        // LB R1 -> LB R2
+        { from: 5, to: 9,  fromSlots: 'top2', toSlots: 'top2', style: 'advance' },
+        { from: 7, to: 10, fromSlots: 'top2', toSlots: 'top2', style: 'advance' },
+
+        // LB R2 -> LB R3
+        { from: 9,  to: 12, fromSlots: 'top2', toSlots: 'top2', style: 'advance' },
+        { from: 10, to: 12, fromSlots: 'top2', toSlots: 'bot2', style: 'advance' },
+
+        // Drop from WB Semi -> LB R4
+        { from: 11, to: 13, fromSlots: 'bot2', toSlots: 'top2', style: 'drop' },
+
+        // LB R3 -> LB R4
+        { from: 12, to: 13, fromSlots: 'top2', toSlots: 'bot2', style: 'advance' },
+
+        // LB R4 -> Finals
+        { from: 13, to: 14, fromSlots: 'top2', toSlots: 'bot2', style: 'advance' }
+    ];
+
+    /* ============================================
+       UTILITY FUNCTIONS
+       ============================================ */
+    function race_kickoff(msg) {
+        rotorhazard.timer.stopAll();
+    }
+
+    function getOrdinal(n) {
+        var s = ['th', 'st', 'nd', 'rd'];
+        var v = n % 100;
+        return (s[(v - 20) % 10] || s[v] || s[0]);
+    }
+
+    /* ============================================
+       DATA PROCESSING (ported from de_leaderboard)
+       ============================================ */
+
+    // Build mapping: race_number -> heat_id for the DE class
+    function buildRaceMap() {
+        var map = {};
+        for (var i = 0; i < ddr_heat_data.length; i++) {
+            var heat = ddr_heat_data[i];
+            if (heat.class_id == de_class_id) {
+                var name = heat.displayname || heat.name || '';
+                var match = name.match(/Race\s+(\d+)/i);
+                if (match) {
+                    var raceNum = parseInt(match[1]);
+                    map[raceNum] = heat.id;
+                    if (raceNum === 14) {
+                        final4_heat_id = heat.id;
+                    }
+                }
+            }
+        }
+        return map;
+    }
+
+    // Build mapping: heat_id -> race_number (reverse lookup)
+    function buildHeatToRaceMap() {
+        var map = {};
+        for (var i = 0; i < ddr_heat_data.length; i++) {
+            var heat = ddr_heat_data[i];
+            if (heat.class_id == de_class_id) {
+                var name = heat.displayname || heat.name || '';
+                var m = name.match(/Race\s+(\d+)/i);
+                if (m) {
+                    map[heat.id] = parseInt(m[1]);
+                }
+            }
+        }
+        return map;
+    }
+
+    // Build seed map: pilot_id -> seed number
+    function buildSeedMap() {
+        var map = {};
+        if (!ddr_result_data || !ddr_result_data.classes) return map;
+        var cls = ddr_result_data.classes[seeding_class_id];
+        if (!cls || !cls.leaderboard) return map;
+
+        var lb_type = 'by_consecutives';
+        var lb = cls.leaderboard[lb_type];
+        if (!lb || lb.length === 0) {
+            lb_type = cls.leaderboard.meta.primary_leaderboard;
+            lb = cls.leaderboard[lb_type];
+        }
+        if (!lb) return map;
+
+        for (var i = 0; i < lb.length; i++) {
+            map[lb[i].pilot_id] = i + 1;
+        }
+        return map;
+    }
+
+    // Get heat object by heat_id
+    function getHeatById(heat_id) {
+        for (var i = 0; i < ddr_heat_data.length; i++) {
+            if (ddr_heat_data[i].id == heat_id) return ddr_heat_data[i];
+        }
+        return null;
+    }
+
+    // Get pilot callsign by pilot_id
+    function getPilotCallsign(pilot_id) {
+        for (var i = 0; i < ddr_pilot_data.length; i++) {
+            if (ddr_pilot_data[i].pilot_id == pilot_id) {
+                return ddr_pilot_data[i].callsign;
+            }
+        }
+        return null;
+    }
+
+    // Get race results for a given heat_id
+    function getRaceResults(heat_id) {
+        if (!ddr_result_data || !ddr_result_data.heats) return null;
+        var heat_result = ddr_result_data.heats[heat_id];
+        if (!heat_result || !heat_result.leaderboard) return null;
+
+        var lb_type = heat_result.leaderboard.meta.primary_leaderboard;
+        var lb = heat_result.leaderboard[lb_type];
+        if (!lb || lb.length === 0) return null;
+
+        // Build position map: pilot_id -> position
+        var positions = {};
+        for (var i = 0; i < lb.length; i++) {
+            positions[lb[i].pilot_id] = lb[i].position;
+        }
+        return positions;
+    }
+
+    // Get race status for a given heat_id
+    function getRaceStatus(heat_id) {
+        // Check if finished (has results)
+        if (ddr_result_data && ddr_result_data.heats && ddr_result_data.heats[heat_id]) {
+            var hr = ddr_result_data.heats[heat_id];
+            if (hr.leaderboard) {
+                var lbt = hr.leaderboard.meta.primary_leaderboard;
+                var lb = hr.leaderboard[lbt];
+                if (lb && lb.length > 0) {
+                    return 'finished';
+                }
+            }
+        }
+        // Check if active
+        if (current_heat_id === heat_id) {
+            return 'active';
+        }
+        return 'scheduled';
+    }
+
+    // Process DE standings for results panel (from de_leaderboard)
+    function processDEStandings() {
+        var standings = {};
+        if (!ddr_result_data || !ddr_result_data.heats) return standings;
+
+        var race_map = buildRaceMap();
+        var seed_map = buildSeedMap();
+        var callsigns = {};
+        for (var pi = 0; pi < ddr_pilot_data.length; pi++) {
+            callsigns[ddr_pilot_data[pi].pilot_id] = ddr_pilot_data[pi].callsign;
+        }
+
+        // Process elimination races (positions 5-16)
+        for (var race_num_str in ELIMINATION_RULES) {
+            var race_num = parseInt(race_num_str);
+            var heat_id = race_map[race_num];
+            if (!heat_id) continue;
+
+            var heat_result = ddr_result_data.heats[heat_id];
+            if (!heat_result || !heat_result.leaderboard) continue;
+
+            var lb_type = heat_result.leaderboard.meta.primary_leaderboard;
+            var lb = heat_result.leaderboard[lb_type];
+            if (!lb || lb.length === 0) continue;
+
+            var positions = ELIMINATION_RULES[race_num];
+            for (var j = 0; j < lb.length; j++) {
+                var entry = lb[j];
+                var pilot_name = entry.callsign || callsigns[entry.pilot_id] || getPilotCallsign(entry.pilot_id) || '?';
+                if (entry.position == 3) {
+                    standings[positions[0]] = {
+                        pilot_id: entry.pilot_id,
+                        callsign: pilot_name,
+                        seed: seed_map[entry.pilot_id] || '?',
+                        determined_by: 'Race ' + race_num
+                    };
+                } else if (entry.position == 4) {
+                    standings[positions[1]] = {
+                        pilot_id: entry.pilot_id,
+                        callsign: pilot_name,
+                        seed: seed_map[entry.pilot_id] || '?',
+                        determined_by: 'Race ' + race_num
+                    };
+                }
+            }
+        }
+
+        // Process Final 4 (Race 14)
+        extractFinal4FromResultData();
+        if (final4_round_results.length > 0) {
+            var wins = {};
+            var finishes = {};
+
+            for (var ri = 0; ri < final4_round_results.length; ri++) {
+                var round = final4_round_results[ri];
+                for (var pid in round) {
+                    var pid_int = parseInt(pid);
+                    if (!wins[pid_int]) wins[pid_int] = 0;
+                    if (!finishes[pid_int]) finishes[pid_int] = [];
+                    finishes[pid_int].push(round[pid]);
+                    if (round[pid] == 1) wins[pid_int]++;
+                }
+            }
+
+            var winner = null;
+            for (var pid in wins) {
+                if (wins[pid] >= 2 && !winner) winner = parseInt(pid);
+            }
+
+            if (winner) {
+                standings[1] = {
+                    pilot_id: winner,
+                    callsign: callsigns[winner] || getPilotCallsign(winner) || '?',
+                    seed: seed_map[winner] || '?',
+                    determined_by: 'Final'
+                };
+
+                var remaining = [];
+                for (var rpid in finishes) {
+                    var rpid_int = parseInt(rpid);
+                    if (rpid_int === winner) continue;
+                    var total = finishes[rpid].reduce(function(a, b) { return a + b; }, 0);
+                    var last_pos = finishes[rpid][finishes[rpid].length - 1];
+                    remaining.push({
+                        pilot_id: rpid_int,
+                        callsign: callsigns[rpid_int] || getPilotCallsign(rpid_int) || '?',
+                        seed: seed_map[rpid_int] || '?',
+                        total: total,
+                        last_race_pos: last_pos
+                    });
+                }
+                remaining.sort(function(a, b) {
+                    if (a.total !== b.total) return a.total - b.total;
+                    return a.last_race_pos - b.last_race_pos;
+                });
+                for (var ri = 0; ri < remaining.length; ri++) {
+                    standings[ri + 2] = {
+                        pilot_id: remaining[ri].pilot_id,
+                        callsign: remaining[ri].callsign,
+                        seed: remaining[ri].seed,
+                        determined_by: 'Final'
+                    };
+                }
+            }
+        }
+
+        return standings;
+    }
+
+    // Extract Final 4 results from result_data (from de_leaderboard)
+    function extractFinal4FromResultData() {
+        if (!ddr_result_data || !ddr_result_data.heats || !final4_heat_id) return;
+        var heat_result = ddr_result_data.heats[final4_heat_id];
+        if (!heat_result) return;
+
+        if (heat_result.rounds) {
+            var extracted = [];
+            var rounds = heat_result.rounds;
+            var round_list = Array.isArray(rounds) ? rounds : Object.values(rounds);
+
+            for (var ri = 0; ri < round_list.length; ri++) {
+                var round = round_list[ri];
+                if (round && round.leaderboard) {
+                    var lb_type = round.leaderboard.meta
+                        ? round.leaderboard.meta.primary_leaderboard
+                        : 'by_race_time';
+                    var lb = round.leaderboard[lb_type];
+                    if (lb && lb.length > 0) {
+                        var round_result = {};
+                        for (var pi = 0; pi < lb.length; pi++) {
+                            round_result[lb[pi].pilot_id] = lb[pi].position;
+                        }
+                        extracted.push(round_result);
+                    }
+                }
+            }
+
+            if (extracted.length > 0) {
+                final4_round_results = extracted;
+                final4_saved_count = extracted.length;
+                return;
+            }
+        }
+
+        if (heat_result.leaderboard) {
+            var lb_type = heat_result.leaderboard.meta.primary_leaderboard;
+            var lb = heat_result.leaderboard[lb_type];
+            if (lb && lb.length > 0 && final4_round_results.length === 0) {
+                var round_result = {};
+                for (var pi = 0; pi < lb.length; pi++) {
+                    round_result[lb[pi].pilot_id] = lb[pi].position;
+                }
+                final4_round_results = [round_result];
+                final4_saved_count = 1;
+            }
+        }
+    }
+
+    /* ============================================
+       RENDER: RACE CARD
+       ============================================ */
+    function buildRaceCard(raceNum, heat, raceMap, seedMap) {
+        var pos = RACE_POSITIONS[raceNum];
+        if (!pos) return '';
+
+        var heat_id = raceMap[raceNum];
+        var status = heat_id ? getRaceStatus(heat_id) : 'scheduled';
+        var results = heat_id ? getRaceResults(heat_id) : null;
+        var type = RACE_TYPE[raceNum] || 'wb';
+
+        // Use live leaderboard for active race
+        var livePositions = null;
+        if (status === 'active' && live_leaderboard) {
+            livePositions = {};
+            for (var li = 0; li < live_leaderboard.length; li++) {
+                livePositions[live_leaderboard[li].pilot_id] = live_leaderboard[li].position;
+            }
+        }
+
+        var activeClass = '';
+        if (status === 'active') activeClass = ' rc_active';
+        else if (status === 'finished') activeClass = ' rc_finished';
+
+        var html = '<div class="race_card' + activeClass + '" id="race_' + raceNum + '" data-race="' + raceNum + '" style="left:' + pos.x + 'px; top:' + pos.y + 'px;">';
+
+        // Header
+        var typeBadge = type.toUpperCase();
+        if (type === 'final') typeBadge = 'FIN';
+        html += '<div class="rc_header">';
+        html += '<span class="rc_type_badge ' + type + '">' + typeBadge + '</span>';
+        html += '<span class="rc_title">Race ' + raceNum + '</span>';
+        html += '</div>';
+
+        // Pilots
+        html += '<div class="rc_pilots">';
+
+        if (heat) {
+            var filtered_slots = heat.slots.filter(function(s) { return s.seed_rank; });
+            for (var j = 0; j < filtered_slots.length; j++) {
+                var slot = filtered_slots[j];
+                var pilot = null;
+                var pilotResolved = false;
+
+                if (slot.pilot_id && slot.pilot_id !== 0) {
+                    // Direct pilot assignment
+                    pilot = ddr_pilot_data.find(function(p) { return p.pilot_id === slot.pilot_id; });
+                    pilotResolved = true;
+                } else if (slot.method == 1 && ddr_result_data && ddr_result_data.heats && ddr_result_data.heats[slot.seed_id]) {
+                    // Resolve from completed heat results
+                    var src_heat = ddr_result_data.heats[slot.seed_id];
+                    if (src_heat.leaderboard) {
+                        var lbt = src_heat.leaderboard.meta.primary_leaderboard;
+                        var lb = src_heat.leaderboard[lbt];
+                        if (lb) {
+                            var found = lb.find(function(p) { return p.position === slot.seed_rank; });
+                            if (found) {
+                                pilot = ddr_pilot_data.find(function(p) { return p.pilot_id === found.pilot_id; });
+                                if (pilot) pilotResolved = true;
+                            }
+                        }
+                    }
+                }
+
+                if (pilotResolved && pilot) {
+                    var seed = seedMap[pilot.pilot_id] || '';
+                    var flagImg = getFlagURL(pilot.pilot_id, ddr_pilot_data);
+                    var pilotImg = getPilotImgURL(pilot);
+                    var pilotId = pilot.pilot_id;
+
+                    // Determine finish position
+                    var finishPos = null;
+                    if (results && results[pilotId]) {
+                        finishPos = results[pilotId];
+                    } else if (livePositions && livePositions[pilotId]) {
+                        finishPos = livePositions[pilotId];
+                    }
+
+                    var posClass = finishPos ? ' rc_pos_' + finishPos : '';
+                    html += '<div class="rc_pilot' + posClass + '">';
+                    html += '<span class="rc_seed">' + (seed ? '#' + seed : '') + '</span>';
+                    html += '<img class="rc_flag" src="' + flagImg + '">';
+                    html += '<img class="rc_avatar" src="' + pilotImg + '">';
+                    html += '<span class="rc_callsign">' + pilot.callsign + '</span>';
+
+                    if (finishPos) {
+                        html += '<span class="rc_finish pos_' + finishPos + '">' + finishPos + '</span>';
+                    }
+                    html += '</div>';
+                } else {
+                    // Unresolved slot - show placeholder
+                    var methodText = get_method_descriptor(ddr_pilot_data, ddr_heat_data, ddr_class_data, slot.method, slot.seed_id, slot.seed_rank, slot.pilot_id);
+                    if (!methodText) methodText = 'TBD';
+
+                    html += '<div class="rc_pilot rc_placeholder">';
+                    html += '<span class="rc_seed"></span>';
+                    html += '<span class="rc_callsign">' + methodText + '</span>';
+                    html += '</div>';
+                }
+            }
+
+            // Pad to 4 rows if needed
+            var count = filtered_slots.length;
+            for (var p = count; p < 4; p++) {
+                html += '<div class="rc_pilot rc_placeholder"><span class="rc_seed"></span><span class="rc_callsign">---</span></div>';
+            }
+        } else {
+            // No heat data yet
+            for (var p = 0; p < 4; p++) {
+                html += '<div class="rc_pilot rc_placeholder"><span class="rc_seed"></span><span class="rc_callsign">---</span></div>';
+            }
+        }
+
+        html += '</div>';
+
+        // Footer
+        var statusText = 'Scheduled';
+        var statusClass = 'rc_status_scheduled';
+        if (status === 'finished') { statusText = 'Finished'; statusClass = 'rc_status_finished'; }
+        else if (status === 'active') { statusText = 'Active'; statusClass = 'rc_status_active'; }
+
+        html += '<div class="rc_footer">';
+        html += '<span class="rc_match_num">Match ' + raceNum + '</span>';
+        html += '<span class="rc_status ' + statusClass + '"><span class="rc_status_dot"></span>' + statusText + '</span>';
+        html += '</div>';
+
+        html += '</div>';
+        return html;
+    }
+
+    /* ============================================
+       RENDER: SVG CONNECTORS
+       ============================================ */
+    function drawConnectors() {
+        var svg = document.getElementById('bracket_connectors');
+        if (!svg) return;
+        svg.innerHTML = '';
+
+        for (var ci = 0; ci < CONNECTIONS.length; ci++) {
+            var conn = CONNECTIONS[ci];
+            var fromPos = RACE_POSITIONS[conn.from];
+            var toPos = RACE_POSITIONS[conn.to];
+            if (!fromPos || !toPos) continue;
+
+            // Calculate Y offsets based on slot area
+            var fromY, toY;
+            if (conn.fromSlots === 'top2') {
+                fromY = fromPos.y + CARD_HEADER_H + CARD_PILOT_H; // center of pilots 1-2
+            } else {
+                fromY = fromPos.y + CARD_HEADER_H + (CARD_PILOT_H * 3); // center of pilots 3-4
+            }
+
+            if (conn.toSlots === 'top2') {
+                toY = toPos.y + CARD_HEADER_H + CARD_PILOT_H; // center of pilots 1-2
+            } else {
+                toY = toPos.y + CARD_HEADER_H + (CARD_PILOT_H * 3); // center of pilots 3-4
+            }
+
+            var x1 = fromPos.x + CARD_W; // right edge of from card
+            var x2 = toPos.x;             // left edge of to card
+            var midX = (x1 + x2) / 2;
+
+            // Create SVG path (elbow connector)
+            var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            var d = 'M' + x1 + ',' + fromY + ' H' + midX + ' V' + toY + ' H' + x2;
+            path.setAttribute('d', d);
+            path.setAttribute('class', 'connector ' + (conn.style || 'advance'));
+            svg.appendChild(path);
+        }
+    }
+
+    /* ============================================
+       RENDER: RESULTS PANEL
+       ============================================ */
+    function buildResultsPanel() {
+        var standings = processDEStandings();
+        var seedMap = buildSeedMap();
+
+        var html = '<div id="results_panel" style="left:' + RESULTS_POS.x + 'px; top:' + RESULTS_POS.y + 'px;">';
+        html += '<div class="rp_header">Standings</div>';
+
+        for (var pos = 1; pos <= 16; pos++) {
+            var entry = standings[pos];
+            var posClass = '';
+            if (pos === 1) posClass = ' rp_pos_1';
+            else if (pos === 2) posClass = ' rp_pos_2';
+            else if (pos === 3) posClass = ' rp_pos_3';
+
+            if (entry) {
+                var pilotImg = getPilotImgURL({ callsign: entry.callsign });
+                html += '<div class="rp_entry' + posClass + '">';
+                html += '<span class="rp_pos">' + pos + '<sup>' + getOrdinal(pos) + '</sup></span>';
+                html += '<img class="rp_avatar" src="' + pilotImg + '">';
+                html += '<span class="rp_name">' + entry.callsign + '</span>';
+                html += '<span class="rp_source">' + entry.determined_by + '</span>';
+                html += '</div>';
+            } else {
+                html += '<div class="rp_entry rp_undetermined' + posClass + '">';
+                html += '<span class="rp_pos">' + pos + '<sup>' + getOrdinal(pos) + '</sup></span>';
+                html += '<span class="rp_name">---</span>';
+                html += '</div>';
+            }
+        }
+
+        html += '</div>';
+        return html;
+    }
+
+    /* ============================================
+       RENDER: MAIN
+       ============================================ */
+    function renderBracket() {
+        var raceMap = buildRaceMap();
+        var seedMap = buildSeedMap();
+
+        var html = '';
+
+        // Build all 14 race cards
+        var raceNums = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
+        for (var ri = 0; ri < raceNums.length; ri++) {
+            var rn = raceNums[ri];
+            var heatId = raceMap[rn];
+            var heat = heatId ? getHeatById(heatId) : null;
+            html += buildRaceCard(rn, heat, raceMap, seedMap);
+        }
+
+        // Results panel
+        html += buildResultsPanel();
+
+        $('#bracket_cards').html(html);
+
+        // Draw connector lines
+        drawConnectors();
+    }
+
+    /* ============================================
+       SOCKET EVENT HANDLERS
+       ============================================ */
+    $(document).ready(function () {
+        DDR_Settings.load(function(settings) {
+            console.log('[DE Bracket] Settings loaded');
+        });
+
+        socket.on('language', default_handler['language']);
+
+        socket.on('pilot_data', function (msg) {
+            ddr_pilot_data = msg.pilots;
+            renderBracket();
+        });
+
+        socket.on('heat_data', function (msg) {
+            ddr_heat_data = msg.heats || [];
+            buildRaceMap();
+            renderBracket();
+        });
+
+        socket.on('class_data', function (msg) {
+            ddr_class_data = msg.classes;
+        });
+
+        socket.on('result_data', function (msg) {
+            ddr_result_data = msg;
+            extractFinal4FromResultData();
+            renderBracket();
+        });
+
+        socket.on('current_heat', function (msg) {
+            if (msg.heat) {
+                current_heat_id = msg.heat;
+            }
+            if (msg.heat_class) {
+                current_heat_class = msg.heat_class;
+            }
+            live_leaderboard = null; // reset live data on heat change
+            renderBracket();
+        });
+
+        socket.on('leaderboard', function (msg) {
+            var race = msg.current;
+            if (!race || !race.leaderboard) return;
+
+            // Store live leaderboard for active race display
+            var lb_type = race.leaderboard.meta.primary_leaderboard;
+            var lb = race.leaderboard[lb_type];
+            if (lb && lb.length > 0) {
+                live_leaderboard = lb;
+            }
+
+            // Track Final 4 rounds
+            var heat_name = race.displayname || '';
+            if (heat_name.match(/Race\s+14/i)) {
+                var current_round = {};
+                for (var li = 0; li < lb.length; li++) {
+                    current_round[lb[li].pilot_id] = lb[li].position;
+                }
+                if (final4_round_results.length > final4_saved_count) {
+                    final4_round_results[final4_round_results.length - 1] = current_round;
+                } else {
+                    final4_round_results.push(current_round);
+                }
+            }
+
+            renderBracket();
+        });
+
+        socket.on('race_status', function (msg) {
+            current_race_status = msg.race_status;
+            default_handler['race_status'](msg);
+        });
+    });
+
+</script>
+
+<main class="page-stream">
+
+    <div id="de_bracket_container">
+
+        <div id="bracket_header">
+            <span id="bracket_title">Double Elimination Bracket</span>
+            <span id="bracket_subtitle">{{ getOption('eventName') }}</span>
+        </div>
+
+        <!-- SVG connector lines layer -->
+        <svg id="bracket_connectors" xmlns="http://www.w3.org/2000/svg"></svg>
+
+        <!-- Race cards container -->
+        <div id="bracket_cards">
+            <div style="color: #555; padding: 40px;">Loading bracket data...</div>
+        </div>
+
+        <!-- Section labels -->
+        <div class="bracket_section_label" style="left: 30px; top: 40px;">Winners Bracket</div>
+        <div class="bracket_section_label" style="left: 30px; top: 670px;">Losers Bracket</div>
+
+    </div>
+
+</main>
+
+</body>
+
+</html>

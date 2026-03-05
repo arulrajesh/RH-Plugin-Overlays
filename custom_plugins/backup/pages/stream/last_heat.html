@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="RotorHazard">
+    <meta name="google" content="notranslate">
+    <title>Last Heat</title>
+
+    <!-- Icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/image/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/image/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/image/favicon-16x16.png">
+    <link rel="manifest" href="/static/image/site.webmanifest">
+    <link rel="mask-icon" href="/static/image/safari-pinned-tab.svg" color="#ee7a28">
+    <link rel="shortcut icon" href="/static/image/favicon.ico">
+    <meta name="msapplication-TileColor" content="#ee7a28">
+    <meta name="msapplication-config" content="/static/image/browserconfig.xml">
+    <meta name="theme-color" content="#224873">
+
+    <!-- Scripts -->
+    <script type="text/javascript" src="/static/jquery-3.6.4/jquery-3.6.4.min.js"></script>
+    <script type="text/javascript" src="/static/articulate/articulate.min.js"></script>
+    <script type="text/javascript" src="/static/socket.io-4.6.1/socket.io.min.js"></script>
+    <script type="text/javascript" src="/static/smoothie/smoothie.js"></script>
+    <script type="text/javascript" src="/static/magnific-1.1.0/magnific-inline-min.js"></script>
+    <script type="text/javascript" src="/static/svgasset.js"></script>
+    <script type="text/javascript" src="/static/rotorhazard.js"></script>
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="/static/magnific-1.1.0/magnific-popup.css"></link>
+    <link rel="stylesheet" href="/static/stream.css"></link>
+    <link rel="stylesheet" href="/ddr_overlays/static/fonts/teko/stylesheet.css"></link>
+    <link rel="stylesheet" href="/ddr_overlays/static/css/ddr_overlays.css"></link>
+
+    <!-- Child template head content -->
+
+</head>
+
+<body>
+
+<script type="text/javascript" charset="utf-8" src="/ddr_overlays/static/js/ddr_settings.js"></script>
+<script type="text/javascript" charset="utf-8" src="/ddr_overlays/static/js/ddr_overlays.js"></script>
+
+<script type="text/javascript" charset="utf-8">
+
+    var data_dependencies = [
+        'all_languages',
+        'language',
+        'pilot_data',
+        'result_data',
+        'heat_data',
+        'current_heat',
+        'class_data',
+        'leaderboard',
+        'race_status',
+        'frequency_data',
+    ];
+
+    rotorhazard.show_messages = false;
+
+    var ddr_pilot_data;
+    var ddr_race_data;
+    var ddr_heat_data;
+    var ddr_class_data;
+    var ddr_frequency_data;
+    var ddr_last_leaderboard_data; // Store last leaderboard to rebuild when frequency data arrives
+    var ddr_heat_colors = {}; // Store activeColor from current_heat event (respects seat/pilot color setting)
+
+    function race_kickoff(msg) {
+        rotorhazard.timer.stopAll();
+
+        var staging_start_pi = (msg.pi_staging_at_s * 1000); // convert seconds (pi) to millis (JS)
+        var race_start_pi = (msg.pi_starts_at_s * 1000); // convert seconds (pi) to millis (JS)
+
+        rotorhazard.timer.race.hidden_staging = Boolean(msg.hide_stage_timer);
+        rotorhazard.timer.race.count_up = Boolean(msg.unlimited_time);
+        rotorhazard.timer.race.duration_tenths = msg.race_time_sec * 10;
+
+        rotorhazard.timer.race.start(race_start_pi, staging_start_pi);
+    }
+
+    $(document).ready(function () {
+        // Load settings from server (works for both Chrome and OBS!)
+        DDR_Settings.load(function(settings) {
+            console.log('[DDR Overlays - Last Heat] Settings loaded and ready');
+        });
+
+        // get pi time
+        rotorhazard.pi_time_request = window.performance.now();
+        socket.emit('get_pi_time');
+
+        socket.on('pi_time', default_handler['pi_time']);
+
+        socket.on('language', default_handler['language']);
+
+        socket.on('race_scheduled', default_handler['race_scheduled']);
+
+        socket.on('pilot_data', function (msg) {
+            rotorhazard.event.pilot_attributes = msg.attributes;
+            rotorhazard.event.pilots = msg.pilots;
+            rotorhazard.options.pilotSort = msg.pilotSort;
+            ddr_pilot_data = msg.pilots;    
+        });
+
+        socket.on('result_data', function (msg) {
+            ddr_race_data = msg;
+        });
+
+        socket.on('current_heat', function (msg) {
+            // Capture activeColor from heat data (respects RotorHazard's seat/pilot color setting)
+            console.log('[DDR Overlays - Last Heat] ========== current_heat received ==========');
+            console.log('[DDR Overlays - Last Heat] Full message:', JSON.stringify(msg, null, 2));
+            ddr_heat_colors = {}; // Reset
+
+            if (msg.heatNodes) {
+                console.log('[DDR Overlays - Last Heat] Number of heat nodes:', Object.keys(msg.heatNodes).length);
+                for (var nodeIdx in msg.heatNodes) {
+                    var heatNode = msg.heatNodes[nodeIdx];
+                    console.log('[DDR Overlays - Last Heat] Node', nodeIdx, 'data:', heatNode);
+                    if (heatNode && heatNode.pilot_id && heatNode.activeColor) {
+                        ddr_heat_colors[heatNode.pilot_id] = heatNode.activeColor;
+                        console.log('[DDR Overlays - Last Heat] ✓ Captured activeColor for pilot', heatNode.pilot_id, ':', heatNode.activeColor, '(hex:', colorvalToHex(heatNode.activeColor), ')');
+                    } else {
+                        console.log('[DDR Overlays - Last Heat] ✗ Skipped - pilot_id:', heatNode?.pilot_id, 'activeColor:', heatNode?.activeColor);
+                    }
+                }
+                console.log('[DDR Overlays - Last Heat] Final ddr_heat_colors:', JSON.stringify(ddr_heat_colors));
+            } else {
+                console.log('[DDR Overlays - Last Heat] ✗ No heatNodes in message!');
+            }
+
+            // Rebuild display if we have leaderboard data
+            if (ddr_last_leaderboard_data) {
+                $('#nextup_pilot_box').empty();
+                DDR_Settings.ready(function() {
+                    build_nextup(
+                        ddr_last_leaderboard_data.leaderboard,
+                        'current',
+                        ddr_last_leaderboard_data.meta,
+                        ddr_pilot_data,
+                        ddr_frequency_data,
+                        true, // show_position = true for last_heat
+                        ddr_heat_colors // Pass heat colors
+                    );
+                });
+            }
+        });
+
+        socket.on('heat_data', function (msg) {
+            ddr_heat_data = msg;
+        });
+
+        socket.on('class_data', function (msg) {
+            ddr_class_data = msg.classes;
+        });
+
+        socket.on('frequency_data', function (msg) {
+            ddr_frequency_data = msg.fdata;
+
+            // Rebuild the display if we have leaderboard data waiting
+            if (ddr_last_leaderboard_data) {
+                $('#nextup_pilot_box').empty();
+                DDR_Settings.ready(function() {
+                    build_nextup(
+                        ddr_last_leaderboard_data.leaderboard,
+                        'current',
+                        ddr_last_leaderboard_data.meta,
+                        ddr_pilot_data,
+                        ddr_frequency_data,
+                        true,  // show_position = true for last_heat
+                        ddr_heat_colors // Pass heat colors
+                    );
+                });
+            }
+        });
+
+        socket.on('race_status', default_handler['race_status']);
+
+        socket.on('heartbeat', default_handler['heartbeat']);
+
+        socket.on('leaderboard', function (msg) {
+            if (msg && 'last_race' in msg) {
+                var race = msg.last_race;
+            } else {
+                var race = msg.current;
+            }
+
+            var heat_number = 0;
+            var number_of_heats = 0;
+            if (ddr_race_data != undefined) {
+                // reason for this: race.heat counts heats of every class (as a global counter),
+                // we need the heat number with respect to its class
+                for (let class_id in ddr_race_data.heats_by_class) {
+                    heat_number = ddr_race_data.heats_by_class[class_id].indexOf(race.heat) + 1;
+                    number_of_heats = ddr_race_data.heats_by_class[class_id].length;
+                    if (heat_number != 0) {
+                        // class found, save data
+                        race_class_id = class_id;
+                        Object.values(ddr_class_data).forEach(race_class => {
+                            if (race_class.id == race_class_id) {
+                                race_class_name = race_class.name;
+                            }
+                        });
+                        break;
+                    }
+                }
+            } else if (ddr_heat_data != undefined) {
+                // alternative method if ddr_race_data is not available
+                let current_heat = ddr_heat_data.heats.find(h => h.id == race.heat);
+                let heats_by_current_class = ddr_heat_data.heats
+                    .filter(h => h.class_id == current_heat.class_id)
+                    .map(h => h.id);
+                heat_number = heats_by_current_class.indexOf(race.heat) + 1;
+                number_of_heats = heats_by_current_class.length;
+                if (heat_number != 0) {
+                    // class found, save data
+                    race_class_id = current_heat.class_id;
+                    Object.values(ddr_class_data).forEach(race_class => {
+                        if (race_class.id == race_class_id) {
+                            race_class_name = race_class.name;
+                        }
+                    });
+                }
+            }
+
+            if (heat_number != 0) {
+                console.log("Found class id " + race_class_id + " (" + race_class_name + ")");
+                console.log("Found heat number " + heat_number + " out of " + number_of_heats + " heats");
+
+                let heat_index = heat_number-1;
+
+                $('.curr_heat_title').html(race.displayname);
+
+                $('#nextup_pilot_box').empty();
+
+                var leaderboard_type = race.leaderboard.meta.primary_leaderboard;
+
+                // Store leaderboard data for later use
+                ddr_last_leaderboard_data = {
+                    leaderboard: race.leaderboard[leaderboard_type],
+                    meta: race.leaderboard.meta
+                };
+
+                // Wait for settings to be loaded before building overlay (critical for OBS)
+                DDR_Settings.ready(function() {
+                    build_nextup(race.leaderboard[leaderboard_type], 'current', race.leaderboard.meta, ddr_pilot_data, ddr_frequency_data, true, ddr_heat_colors);
+                });
+
+                var bracket_format_info = bracket_formats[race_bracket_type];
+                let is_winner_bracket = bracket_format_info && ((bracket_format_info[heat_index].type == "winner") || (bracket_format_info[heat_index].type == "preliminary"));
+                let is_final_heat = bracket_format_info && ((heat_number >= bracket_format_info[bracket_format_info.length-1].number));
+
+                // the result is nicely placed for heats with four pilots
+                if (is_final_heat || !bracket_format_info) {
+                    // when in final of elimination brackets or bracket type is not defined ('none') don't show anything
+                    $('#winner-cell').empty();
+                    $('#lower-cell').empty();
+                } else {
+                    // left side
+                    if (bracket_format_info[heat_index].advance_to != undefined) {
+                        $('#winner-cell').text("Advance to Race " + bracket_format_info[heat_index].advance_to);
+                    } else if (is_winner_bracket) {
+                        $('#winner-cell').text("Advance to Winner Bracket");
+                    } else {
+                        $('#winner-cell').text("Advance to Lower Bracket");
+                    }
+
+                    // right side
+                    if (is_winner_bracket) {
+                        $('#lower-cell').text("Go to Lower Bracket");
+                    } else {
+                        $('#lower-cell').text("Eliminated");
+                    }
+                }
+            }
+        });
+
+        socket.on('prestage_ready', default_handler['prestage_ready']);
+
+        socket.on('stage_ready', default_handler['stage_ready']);
+
+        socket.on('stop_timer', default_handler['stop_timer']);
+    });
+
+    let race_class_id; // do not use '{ class id }' from URL, it is computed automatically
+    let race_class_name;
+    let race_bracket_type = '{{ bracket_type }}';
+
+</script>
+
+<main class="page-stream">
+
+    <div id="ddr_nextup">
+
+        <div id="nextup_title">
+            Results:
+        </div>
+
+        <div id="title">
+            <span class="curr_heat_title"></span>
+            <span class="curr_event_name">{{ getOption('eventName') }}</span>
+        </div>
+
+        <div class="table">
+            <div class="table-row">
+                <div class="table-cell bracket" id="winner-cell">Winner Bracket</div>
+                <div class="table-cell bracket" id="lower-cell">Lower Bracket</div>
+            </div>
+        </div>
+
+        <div id="nextup_pilot_box">
+
+            <div class="nextup_pilot">
+
+                <div class="nextup_pilot_position">
+                    1st
+                </div>
+
+                <div class="nextup_pilot_avatar">
+                    <div class="nextup_pilot_avatar_mask">
+                        <img src="/ddr_overlays/static/imgs/no_avatar.png" alt="Avatar">
+                    </div>
+                </div>
+
+                <div class="nextup_pilot_flag">
+                    <div class="nextup_pilot_flag_mask">
+                        <img src="/ddr_overlays/static/imgs/flags/nl.jpg">
+                    </div>
+                </div>
+
+                <div class="nextup_pilot_name">
+                    MCK FPV
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <div id="race_lb">
+
+        <!--
+        <div class="race_lb_pilot">
+            <div class="pilot_flag">
+                <img src="http://localhost:5050/fpvscores/static/assets/imgs/flags/pl.jpg" alt="PL" height="32px">
+            </div>
+            <div class="pilot_pos">1.</div>
+            <div class="pilot_name">JesseFPV</div>
+            <div class="pilot_score">00:34.129</div>
+        </div>
+        -->
+
+    </div>
+
+</div>
+
+</main>
+
+</body>
+
+</html>

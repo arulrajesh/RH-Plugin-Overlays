@@ -1,0 +1,363 @@
+/* DE Bracket Visual Overlay - 1920x1080 OBS Browser Source */
+
+body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: #0a0a1e;
+    font-family: teko, Arial, Helvetica, sans-serif;
+    color: #e0e0e0;
+    width: 1920px;
+    height: 1080px;
+}
+
+/* ============================================
+   CONTAINER
+   ============================================ */
+#de_bracket_container {
+    position: relative;
+    width: 1920px;
+    height: 1080px;
+}
+
+#bracket_header {
+    position: absolute;
+    top: 6px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    z-index: 10;
+    pointer-events: none;
+}
+
+#bracket_title {
+    font-size: 24px;
+    font-weight: 600;
+    color: #fff;
+    letter-spacing: 1px;
+    display: inline;
+}
+
+#bracket_subtitle {
+    font-size: 16px;
+    color: #666;
+    margin-left: 12px;
+    display: inline;
+}
+
+/* Section labels */
+.bracket_section_label {
+    position: absolute;
+    font-size: 16px;
+    font-weight: 400;
+    color: #4a6fa5;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    z-index: 5;
+}
+
+/* ============================================
+   RACE CARDS
+   ============================================ */
+.race_card {
+    position: absolute;
+    width: 220px;
+    background: #141428;
+    border: 1px solid #2a2a4a;
+    border-radius: 6px;
+    overflow: hidden;
+    z-index: 2;
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.race_card.rc_active {
+    border-color: #ffd700;
+    animation: rc_pulse 2s ease-in-out infinite;
+}
+
+.race_card.rc_finished {
+    border-color: #2d5a2d;
+}
+
+@keyframes rc_pulse {
+    0%, 100% { box-shadow: 0 0 8px rgba(255, 215, 0, 0.2); }
+    50% { box-shadow: 0 0 18px rgba(255, 215, 0, 0.5); }
+}
+
+/* Card header */
+.rc_header {
+    background: #013e77;
+    padding: 3px 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.rc_type_badge {
+    font-size: 11px;
+    padding: 1px 5px;
+    border-radius: 2px;
+    text-transform: uppercase;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.rc_type_badge.wb { background: #1b5e20; color: #a5d6a7; }
+.rc_type_badge.lb { background: #7f1d1d; color: #ef9a9a; }
+.rc_type_badge.final { background: #e65100; color: #ffcc80; }
+
+.rc_title {
+    color: #fff;
+    font-size: 16px;
+    font-weight: 400;
+    flex: 1;
+}
+
+/* Pilot rows */
+.rc_pilots {
+    background: #141428;
+}
+
+.rc_pilot {
+    display: flex;
+    align-items: center;
+    padding: 1px 6px;
+    gap: 4px;
+    border-top: 1px solid #1e1e3a;
+    height: 24px;
+    box-sizing: border-box;
+}
+
+.rc_pilot:first-child {
+    border-top: none;
+}
+
+.rc_pilot.rc_pos_1 { background: rgba(255, 215, 0, 0.08); }
+.rc_pilot.rc_pos_2 { background: rgba(192, 192, 192, 0.06); }
+
+.rc_seed {
+    font-size: 13px;
+    color: #666;
+    width: 20px;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.rc_flag {
+    width: 18px;
+    height: 12px;
+    border-radius: 1px;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.rc_avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.rc_callsign {
+    flex: 1;
+    font-size: 15px;
+    color: #e0e0e0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.2;
+}
+
+.rc_finish {
+    font-size: 17px;
+    font-weight: 700;
+    width: 20px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.rc_finish.pos_1 { color: #ffd700; }
+.rc_finish.pos_2 { color: #c0c0c0; }
+.rc_finish.pos_3 { color: #cd7f32; }
+.rc_finish.pos_4 { color: #888; }
+
+/* Placeholder pilot (unresolved slot) */
+.rc_pilot.rc_placeholder .rc_callsign {
+    color: #444;
+    font-style: italic;
+    font-size: 13px;
+}
+
+/* Card footer */
+.rc_footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 2px 8px;
+    background: #0c0c1e;
+    border-top: 1px solid #1e1e3a;
+}
+
+.rc_match_num {
+    font-size: 13px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.rc_status {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.rc_status_dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.rc_status_finished .rc_status_dot { background: #4caf50; }
+.rc_status_finished { color: #4caf50; }
+
+.rc_status_active .rc_status_dot { background: #ff9800; animation: status_blink 1.2s ease-in-out infinite; }
+.rc_status_active { color: #ff9800; }
+
+.rc_status_scheduled .rc_status_dot { background: #555; }
+.rc_status_scheduled { color: #555; }
+
+@keyframes status_blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+/* ============================================
+   SVG CONNECTOR LINES
+   ============================================ */
+#bracket_connectors {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1920px;
+    height: 1080px;
+    z-index: 1;
+    pointer-events: none;
+}
+
+.connector {
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.connector.advance {
+    stroke: #3a5a8a;
+}
+
+.connector.drop {
+    stroke: #6b3a3a;
+    stroke-dasharray: 6 4;
+}
+
+/* ============================================
+   RESULTS PANEL
+   ============================================ */
+#results_panel {
+    position: absolute;
+    z-index: 2;
+    background: #141428;
+    border: 1px solid #2a2a4a;
+    border-radius: 6px;
+    overflow: hidden;
+    width: 250px;
+}
+
+.rp_header {
+    background: #013e77;
+    padding: 6px 12px;
+    font-size: 18px;
+    font-weight: 500;
+    color: #fff;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.rp_entry {
+    display: flex;
+    align-items: center;
+    padding: 3px 10px;
+    gap: 6px;
+    border-top: 1px solid #1e1e3a;
+    height: 28px;
+    box-sizing: border-box;
+}
+
+.rp_entry:first-child {
+    border-top: none;
+}
+
+.rp_pos {
+    font-size: 15px;
+    font-weight: 700;
+    width: 30px;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.rp_pos sup {
+    font-size: 10px;
+    font-weight: 400;
+}
+
+.rp_entry.rp_pos_1 .rp_pos { color: #ffd700; }
+.rp_entry.rp_pos_2 .rp_pos { color: #c0c0c0; }
+.rp_entry.rp_pos_3 .rp_pos { color: #cd7f32; }
+
+.rp_avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.rp_name {
+    flex: 1;
+    font-size: 14px;
+    color: #e0e0e0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.rp_source {
+    font-size: 11px;
+    color: #555;
+}
+
+.rp_entry.rp_undetermined {
+    opacity: 0.3;
+}
+
+.rp_entry.rp_undetermined .rp_name {
+    color: #555;
+}
+
+/* ============================================
+   ELIMINATION INFO (position labels next to cards)
+   ============================================ */
+.elim_label {
+    position: absolute;
+    z-index: 3;
+    font-size: 11px;
+    color: #6b3a3a;
+    white-space: nowrap;
+}

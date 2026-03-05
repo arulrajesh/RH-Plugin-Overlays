@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pilot Queue - Admin</title>
+    <link rel="stylesheet" href="/pilot_queue/static/css/queue.css">
+    <style>
+        /* Replace modal */
+        .replace-modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5); z-index: 100; justify-content: center; align-items: center;
+        }
+        .replace-modal-overlay.active { display: flex; }
+        .replace-modal {
+            background: #fff; border-radius: 10px; padding: 24px; max-width: 400px; width: 90%;
+            max-height: 60vh; display: flex; flex-direction: column;
+        }
+        .replace-modal h4 { margin: 0 0 8px; font-size: 16px; }
+        .replace-modal .replace-search {
+            padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px;
+            margin-bottom: 8px; width: 100%; box-sizing: border-box;
+        }
+        .replace-modal .replace-list { overflow-y: auto; flex: 1; }
+        .replace-modal .replace-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 8px 10px; border-bottom: 1px solid #eee; cursor: pointer;
+        }
+        .replace-modal .replace-item:hover { background: #e8f5e9; }
+        .replace-modal .replace-item.disabled { opacity: 0.4; cursor: not-allowed; }
+        .replace-modal .replace-item.disabled:hover { background: transparent; }
+        .replace-modal .replace-item .ri-name { font-weight: 600; font-size: 14px; }
+        .replace-modal .replace-item .ri-info { font-size: 12px; color: #888; }
+        .replace-modal .replace-cancel {
+            margin-top: 12px; padding: 8px 20px; background: #888; color: #fff;
+            border: none; border-radius: 4px; cursor: pointer; align-self: center;
+        }
+    </style>
+</head>
+<body class="admin">
+
+<div class="admin-header">
+    <h1>Pilot Queue - Admin</h1>
+    <p>Configure and manage the pilot self-service queue</p>
+    <a href="/pilot_queue/" target="_blank" class="kiosk-link">Open Kiosk Page</a>
+</div>
+
+<div id="admin_message" class="admin-message"></div>
+
+<!-- Settings -->
+<div class="admin-section">
+    <h3>Settings</h3>
+    <div class="form-row">
+        <label for="cfg_class">Race Class:</label>
+        <select id="cfg_class"></select>
+        <span class="hint">Heats will be created in this class</span>
+    </div>
+    <div class="form-row">
+        <label for="cfg_num_slots">Number of Slots:</label>
+        <input type="number" id="cfg_num_slots" min="1" max="8" value="4">
+        <span class="hint">Frequency slots per heat (match your node count)</span>
+    </div>
+    <div class="form-row">
+        <label for="cfg_max_packs">Max Packs per Pilot:</label>
+        <input type="number" id="cfg_max_packs" min="1" max="99" value="10">
+        <span class="hint">Total races a pilot can fly</span>
+    </div>
+    <div class="form-row">
+        <label for="cfg_max_queue">Max Queue Entries:</label>
+        <input type="number" id="cfg_max_queue" min="1" max="10" value="2">
+        <span class="hint">Times a pilot can be in the queue simultaneously</span>
+    </div>
+    <div class="form-row">
+        <label for="cfg_rest_rounds">Rest Rounds:</label>
+        <input type="number" id="cfg_rest_rounds" min="0" max="10" value="0">
+        <span class="hint">Heats to skip between a pilot's races (0 = no rest)</span>
+    </div>
+    <div class="form-row">
+        <label for="cfg_auto_generate">Auto-Generate Heats:</label>
+        <input type="checkbox" id="cfg_auto_generate" checked style="width: auto;">
+        <span class="hint">Create heat automatically when all slots are filled</span>
+    </div>
+    <button class="admin-btn primary" onclick="saveConfig()">Save Settings</button>
+</div>
+
+<!-- Queue Overview -->
+<div class="admin-section">
+    <h3>Queue Overview</h3>
+    <div id="admin_slots" class="admin-slots">
+        <div style="color: #888;">Loading...</div>
+    </div>
+    <button class="admin-btn success" id="btn_generate" onclick="generateHeat()" disabled>Generate Heat</button>
+    <button class="admin-btn danger" onclick="if(confirm('Clear all queues and pilot stats?')) resetQueue()">Reset Queue</button>
+    <span id="heat_counter" style="margin-left: 16px; color: #888; font-size: 14px;"></span>
+</div>
+
+<!-- Generated Heats -->
+<div class="admin-section">
+    <h3>Generated Heats</h3>
+    <div id="admin_heats">
+        <div style="color: #888;">Loading...</div>
+    </div>
+</div>
+
+<!-- Pilot Stats -->
+<div class="admin-section">
+    <h3>Pilot Stats</h3>
+    <table class="stats-table">
+        <thead>
+            <tr>
+                <th>Pilot</th>
+                <th>Packs Flown</th>
+                <th>Queued</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody id="stats_body">
+            <tr><td colspan="4" style="color: #888;">Loading...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- Replace Pilot Modal -->
+<div class="replace-modal-overlay" id="replace_modal">
+    <div class="replace-modal">
+        <h4 id="replace_title">Replace pilot</h4>
+        <input type="text" class="replace-search" id="replace_search" placeholder="Search pilot..." autocomplete="off">
+        <div class="replace-list" id="replace_list"></div>
+        <button class="replace-cancel" onclick="closeReplaceModal()">Cancel</button>
+    </div>
+</div>
+
+<script>
+    var pollInterval;
+    var lastStatusData = null;
+    var lastHeatsData = null;
+    var replaceState = { oldPilotId: null, slot: null, mode: 'queue', heatId: null };
+
+    function showMessage(text, type) {
+        var el = document.getElementById('admin_message');
+        el.textContent = text;
+        el.className = 'admin-message ' + type;
+        setTimeout(function() { el.className = 'admin-message'; }, 4000);
+    }
+
+    function loadConfig() {
+        fetch('/pilot_queue/api/config')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var cfg = data.config;
+                var sel = document.getElementById('cfg_class');
+                sel.innerHTML = '<option value="">-- Select Class --</option>';
+                data.classes.forEach(function(c) {
+                    var opt = document.createElement('option');
+                    opt.value = c.id;
+                    opt.textContent = c.name;
+                    if (cfg.class_id && c.id == cfg.class_id) opt.selected = true;
+                    sel.appendChild(opt);
+                });
+
+                document.getElementById('cfg_num_slots').value = cfg.num_slots != null ? cfg.num_slots : 4;
+                document.getElementById('cfg_max_packs').value = cfg.max_packs != null ? cfg.max_packs : 10;
+                document.getElementById('cfg_max_queue').value = cfg.max_queue != null ? cfg.max_queue : 2;
+                document.getElementById('cfg_rest_rounds').value = cfg.rest_rounds != null ? cfg.rest_rounds : 0;
+                document.getElementById('cfg_auto_generate').checked = cfg.auto_generate !== false;
+            })
+            .catch(function(e) { showMessage('Failed to load config', 'error'); });
+    }
+
+    function saveConfig() {
+        var cfg = {
+            class_id: document.getElementById('cfg_class').value || null,
+            num_slots: parseInt(document.getElementById('cfg_num_slots').value),
+            max_packs: parseInt(document.getElementById('cfg_max_packs').value),
+            max_queue: parseInt(document.getElementById('cfg_max_queue').value),
+            rest_rounds: parseInt(document.getElementById('cfg_rest_rounds').value),
+            auto_generate: document.getElementById('cfg_auto_generate').checked
+        };
+
+        fetch('/pilot_queue/api/config', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(cfg)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                showMessage('Settings saved', 'success');
+                pollStatus();
+            } else {
+                showMessage('Failed to save', 'error');
+            }
+        })
+        .catch(function(e) { showMessage('Error saving settings', 'error'); });
+    }
+
+    function generateHeat() {
+        fetch('/pilot_queue/api/generate', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showMessage(data.message, data.success ? 'success' : 'error');
+            pollStatus();
+            pollHeats();
+        })
+        .catch(function(e) { showMessage('Error generating heat', 'error'); });
+    }
+
+    function resetQueue() {
+        fetch('/pilot_queue/api/reset', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showMessage(data.message, data.success ? 'success' : 'error');
+            pollStatus();
+        })
+        .catch(function(e) { showMessage('Error resetting queue', 'error'); });
+    }
+
+    function removePilot(pilotId, slot) {
+        fetch('/pilot_queue/api/leave', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({pilot_id: pilotId, slot: slot})
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) { pollStatus(); })
+        .catch(function(e) { showMessage('Error removing pilot', 'error'); });
+    }
+
+    // ============================================
+    // REPLACE PILOT
+    // ============================================
+    function openReplaceModal(oldPilotId, slot) {
+        replaceState.oldPilotId = oldPilotId;
+        replaceState.slot = slot;
+        replaceState.mode = 'queue';
+        replaceState.heatId = null;
+
+        var oldName = 'Pilot ' + oldPilotId;
+        if (lastStatusData && lastStatusData.pilot_stats[oldPilotId]) {
+            oldName = lastStatusData.pilot_stats[oldPilotId].callsign || oldName;
+        }
+        document.getElementById('replace_title').textContent = 'Replace ' + oldName + ' in Slot ' + (slot + 1);
+        document.getElementById('replace_search').value = '';
+        renderReplaceList('');
+        document.getElementById('replace_modal').classList.add('active');
+        setTimeout(function() { document.getElementById('replace_search').focus(); }, 100);
+    }
+
+    function openHeatReplaceModal(heatId, oldPilotId, oldName, heatName) {
+        replaceState.oldPilotId = oldPilotId;
+        replaceState.slot = null;
+        replaceState.mode = 'heat';
+        replaceState.heatId = heatId;
+
+        document.getElementById('replace_title').textContent = 'Replace ' + oldName + ' in ' + heatName;
+        document.getElementById('replace_search').value = '';
+        renderReplaceList('');
+        document.getElementById('replace_modal').classList.add('active');
+        setTimeout(function() { document.getElementById('replace_search').focus(); }, 100);
+    }
+
+    function closeReplaceModal() {
+        document.getElementById('replace_modal').classList.remove('active');
+        replaceState.oldPilotId = null;
+        replaceState.slot = null;
+        replaceState.mode = 'queue';
+        replaceState.heatId = null;
+    }
+
+    function renderReplaceList(filter) {
+        var list = document.getElementById('replace_list');
+        if (!lastStatusData) { list.innerHTML = '<div style="color:#888;padding:10px;">Loading...</div>'; return; }
+
+        var stats = lastStatusData.pilot_stats;
+        var filterLower = filter.toLowerCase();
+
+        // Build list of all pilots
+        var pilots = Object.keys(stats).map(function(pid) {
+            return { id: parseInt(pid), data: stats[pid] };
+        }).sort(function(a, b) {
+            return (a.data.callsign || '').localeCompare(b.data.callsign || '');
+        });
+
+        if (filterLower) {
+            pilots = pilots.filter(function(p) {
+                return (p.data.callsign || '').toLowerCase().indexOf(filterLower) !== -1;
+            });
+        }
+
+        // Skip the old pilot themselves
+        pilots = pilots.filter(function(p) { return p.id !== replaceState.oldPilotId; });
+
+        if (pilots.length === 0) {
+            list.innerHTML = '<div style="color:#888;padding:10px;">No pilots found</div>';
+            return;
+        }
+
+        var html = '';
+        pilots.forEach(function(p) {
+            var name = p.data.callsign || 'Pilot ' + p.id;
+            var disabled = false;
+            var disabledReason = '';
+
+            if (replaceState.mode === 'queue') {
+                // Queue mode: check same-round conflict
+                var slot = replaceState.slot;
+                var rowIdx = -1;
+                if (lastStatusData.slots[slot]) {
+                    rowIdx = lastStatusData.slots[slot].indexOf(replaceState.oldPilotId);
+                }
+                if (rowIdx >= 0) {
+                    var numSlots = lastStatusData.config.num_slots || 4;
+                    for (var s = 0; s < numSlots; s++) {
+                        if (s === slot) continue;
+                        if (lastStatusData.slots[s] && rowIdx < lastStatusData.slots[s].length && lastStatusData.slots[s][rowIdx] === p.id) {
+                            disabled = true;
+                            disabledReason = 'In same round';
+                            break;
+                        }
+                    }
+                }
+            } else {
+                // Heat mode: check if pilot is already in this heat
+                if (lastHeatsData) {
+                    for (var h = 0; h < lastHeatsData.length; h++) {
+                        if (lastHeatsData[h].heat_id === replaceState.heatId) {
+                            var heatPilots = lastHeatsData[h].pilots || [];
+                            for (var hp = 0; hp < heatPilots.length; hp++) {
+                                if (heatPilots[hp].pilot_id === p.id) {
+                                    disabled = true;
+                                    disabledReason = 'Already in this heat';
+                                    break;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (disabled) {
+                html += '<div class="replace-item disabled">';
+                html += '<span class="ri-name">' + name + '</span>';
+                html += '<span class="ri-info" style="color:#c00;">' + disabledReason + '</span>';
+                html += '</div>';
+            } else {
+                html += '<div class="replace-item" onclick="doReplace(' + p.id + ')">';
+                html += '<span class="ri-name">' + name + '</span>';
+                html += '<span class="ri-info">' + (p.data.packs_flown + p.data.packs_queued) + '/' + (lastStatusData.config.max_packs || 10) + ' packs</span>';
+                html += '</div>';
+            }
+        });
+
+        list.innerHTML = html;
+    }
+
+    document.getElementById('replace_search').addEventListener('input', function() {
+        renderReplaceList(this.value);
+    });
+
+    function doReplace(newPilotId) {
+        if (replaceState.oldPilotId === null) return;
+
+        var url, body;
+        if (replaceState.mode === 'heat') {
+            url = '/pilot_queue/api/replace_in_heat';
+            body = {
+                heat_id: replaceState.heatId,
+                old_pilot_id: replaceState.oldPilotId,
+                new_pilot_id: newPilotId
+            };
+        } else {
+            url = '/pilot_queue/api/replace';
+            body = {
+                old_pilot_id: replaceState.oldPilotId,
+                new_pilot_id: newPilotId,
+                slot: replaceState.slot
+            };
+        }
+
+        fetch(url, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            closeReplaceModal();
+            showMessage(data.message, data.success ? 'success' : 'error');
+            pollStatus();
+            pollHeats();
+        })
+        .catch(function(e) {
+            closeReplaceModal();
+            showMessage('Error replacing pilot', 'error');
+        });
+    }
+
+    // Close replace modal on overlay click
+    document.getElementById('replace_modal').addEventListener('click', function(e) {
+        if (e.target === this) closeReplaceModal();
+    });
+
+    // ============================================
+    // POLLING & RENDER
+    // ============================================
+    function pollStatus() {
+        fetch('/pilot_queue/api/status')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            lastStatusData = data;
+            renderSlots(data);
+            renderStats(data);
+            document.getElementById('btn_generate').disabled = !data.can_generate;
+            document.getElementById('heat_counter').textContent = 'Heats generated: ' + data.heat_counter;
+        })
+        .catch(function(e) {});
+    }
+
+    function renderSlots(data) {
+        var container = document.getElementById('admin_slots');
+        var html = '';
+        var numSlots = data.config.num_slots || 4;
+
+        for (var i = 0; i < numSlots; i++) {
+            html += '<div class="admin-slot"><h4>Slot ' + (i + 1) + ' (' + (data.slots[i] ? data.slots[i].length : 0) + ' queued)</h4>';
+            if (data.slots[i] && data.slots[i].length > 0) {
+                data.slots[i].forEach(function(pid, rowIdx) {
+                    var name = (data.pilot_stats[pid] && data.pilot_stats[pid].callsign) || 'Pilot ' + pid;
+                    html += '<div class="admin-slot-pilot">';
+                    html += '<span>R' + (data.heat_counter + 1 + rowIdx) + ': ' + name + '</span>';
+                    html += '<span>';
+                    html += '<button class="remove-btn" onclick="openReplaceModal(' + pid + ',' + i + ')" title="Replace pilot" style="color:#1565c0;margin-right:4px;">&#8644;</button>';
+                    html += '<button class="remove-btn" onclick="removePilot(' + pid + ',' + i + ')" title="Remove pilot">&#10005;</button>';
+                    html += '</span>';
+                    html += '</div>';
+                });
+            } else {
+                html += '<div style="color: #aaa; font-size: 13px;">Empty</div>';
+            }
+            html += '</div>';
+        }
+        container.innerHTML = html;
+    }
+
+    function renderStats(data) {
+        var tbody = document.getElementById('stats_body');
+        var html = '';
+        var stats = data.pilot_stats;
+        var entries = Object.keys(stats).map(function(pid) {
+            return {pid: pid, data: stats[pid]};
+        }).filter(function(e) {
+            return e.data.packs_flown > 0 || e.data.packs_queued > 0 || e.data.in_slots.length > 0;
+        }).sort(function(a, b) {
+            return (a.data.callsign || '').localeCompare(b.data.callsign || '');
+        });
+
+        if (entries.length === 0) {
+            html = '<tr><td colspan="4" style="color: #888;">No pilot activity yet</td></tr>';
+        } else {
+            entries.forEach(function(e) {
+                var statusText = e.data.eligible ? '<span style="color: green;">Eligible</span>' : '<span style="color: #c00;">' + e.data.reason + '</span>';
+                html += '<tr>';
+                html += '<td>' + (e.data.callsign || 'Pilot ' + e.pid) + '</td>';
+                html += '<td>' + e.data.packs_flown + ' / ' + data.config.max_packs + '</td>';
+                html += '<td>' + e.data.packs_queued + '</td>';
+                html += '<td>' + statusText + '</td>';
+                html += '</tr>';
+            });
+        }
+        tbody.innerHTML = html;
+    }
+
+    // ============================================
+    // HEATS POLLING & RENDER
+    // ============================================
+    function pollHeats() {
+        fetch('/pilot_queue/api/heats')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            lastHeatsData = data.heats;
+            renderGeneratedHeats(data.heats);
+        })
+        .catch(function() {});
+    }
+
+    function renderGeneratedHeats(heats) {
+        var container = document.getElementById('admin_heats');
+        if (!heats || heats.length === 0) {
+            container.innerHTML = '<div style="color: #888;">No heats generated yet</div>';
+            return;
+        }
+
+        // Show active/upcoming first, then completed (most recent first)
+        var active = heats.filter(function(h) { return h.status === 'active' || h.status === 'upcoming'; });
+        var completed = heats.filter(function(h) { return h.status === 'completed'; }).reverse();
+
+        var html = '';
+
+        if (active.length > 0) {
+            active.forEach(function(heat) {
+                var statusLabel = heat.status === 'active' ? 'Racing' : 'Up Next';
+                var statusColor = heat.status === 'active' ? '#2e7d32' : '#1565c0';
+                html += '<div class="admin-slot" style="border-left: 3px solid ' + statusColor + ';">';
+                html += '<h4>' + heat.heat_name + ' <span style="font-size:12px;color:' + statusColor + ';font-weight:normal;">(' + statusLabel + ')</span></h4>';
+                heat.pilots.forEach(function(p) {
+                    html += '<div class="admin-slot-pilot">';
+                    html += '<span>Slot ' + (p.slot + 1) + ': ' + p.callsign + ' (' + p.packs + ' packs)</span>';
+                    html += '<span>';
+                    html += '<button class="remove-btn" onclick="openHeatReplaceModal(' + heat.heat_id + ',' + p.pilot_id + ',\'' + p.callsign.replace(/'/g, "\\'") + '\',\'' + heat.heat_name.replace(/'/g, "\\'") + '\')" title="Replace pilot" style="color:#1565c0;">&#8644;</button>';
+                    html += '</span>';
+                    html += '</div>';
+                });
+                html += '</div>';
+            });
+        }
+
+        if (completed.length > 0) {
+            html += '<details style="margin-top:8px;"><summary style="cursor:pointer;color:#888;font-size:13px;">' + completed.length + ' completed heat(s)</summary>';
+            completed.forEach(function(heat) {
+                html += '<div class="admin-slot" style="border-left: 3px solid #888; opacity: 0.7;">';
+                html += '<h4>' + heat.heat_name + ' <span style="font-size:12px;color:#888;font-weight:normal;">(Completed)</span></h4>';
+                heat.pilots.forEach(function(p) {
+                    var label = 'Slot ' + (p.slot + 1) + ': ' + p.callsign;
+                    if (heat.results) {
+                        for (var r = 0; r < heat.results.length; r++) {
+                            if (heat.results[r].callsign === p.callsign && heat.results[r].position) {
+                                label = '#' + heat.results[r].position + ' ' + label;
+                                break;
+                            }
+                        }
+                    }
+                    html += '<div class="admin-slot-pilot"><span>' + label + '</span></div>';
+                });
+                html += '</div>';
+            });
+            html += '</details>';
+        }
+
+        container.innerHTML = html;
+    }
+
+    // Init
+    loadConfig();
+    pollStatus();
+    pollHeats();
+    setInterval(pollStatus, 3000);
+    setInterval(pollHeats, 3000);
+</script>
+
+</body>
+</html>
