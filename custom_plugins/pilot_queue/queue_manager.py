@@ -524,6 +524,54 @@ class QueueManager:
 
             self.save()
 
+    def reconcile_heats(self, rhapi):
+        """Remove any tracked heats that no longer exist in RotorHazard.
+        Called on timer stage to catch heats deleted while plugin wasn't running.
+        """
+        try:
+            rh_heat_ids = {h.id for h in rhapi.db.heats}
+        except Exception as e:
+            logger.warning(f"[PilotQueue] Could not fetch heats for reconciliation: {e}")
+            return
+
+        with self._lock:
+            surviving = []
+            removed_ids = []
+            for h in self.generated_heats:
+                if isinstance(h, dict) and h.get('heat_id') not in rh_heat_ids:
+                    removed_ids.append(h.get('heat_id'))
+                    # Refund packs_queued if the heat was never completed
+                    if not h.get('completed'):
+                        for pid in h.get('slot_pilots', {}).values():
+                            stat = self.get_pilot_stat(pid)
+                            stat['packs_queued'] = max(0, stat['packs_queued'] - 1)
+                else:
+                    surviving.append(h)
+
+            if removed_ids:
+                self.generated_heats = surviving
+                self.save()
+                logger.info(f"[PilotQueue] Reconciled: removed stale heat IDs {removed_ids}")
+
+    def remove_heat(self, heat_id):
+        """Remove a generated heat that was deleted from RotorHazard.
+        If the heat was uncompleted, refunds packs_queued for its pilots.
+        Returns True if the heat was found and removed, False otherwise.
+        """
+        with self._lock:
+            for i, h in enumerate(self.generated_heats):
+                if isinstance(h, dict) and h.get('heat_id') == heat_id:
+                    # Uncompleted heat: pilots didn't race, so refund their queued pack count
+                    if not h.get('completed'):
+                        for pid in h.get('slot_pilots', {}).values():
+                            stat = self.get_pilot_stat(pid)
+                            stat['packs_queued'] = max(0, stat['packs_queued'] - 1)
+                    self.generated_heats.pop(i)
+                    self.save()
+                    logger.info(f"[PilotQueue] Removed deleted heat {heat_id} from tracking")
+                    return True
+            return False
+
     def reset(self):
         """Clear all queues and stats."""
         with self._lock:

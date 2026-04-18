@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <title>Pilot Queue</title>
-    <link rel="stylesheet" href="/pilot_queue/static/css/queue.css">
+    <link rel="stylesheet" href="/q/static/css/queue.css">
 </head>
 <body class="kiosk">
 
@@ -162,7 +162,7 @@
         var slot = selectedSlot;
         closeSpotlight();
 
-        fetch('/pilot_queue/api/join', {
+        fetch('/q/api/join', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ pilot_id: pilotId, slot: slot })
@@ -362,7 +362,7 @@
     // POLLING
     // ============================================
     function pollStatus() {
-        fetch('/pilot_queue/api/status')
+        fetch('/q/api/status')
         .then(function(r) { return r.json(); })
         .then(function(data) {
             queueData = data;
@@ -376,7 +376,7 @@
     }
 
     function pollHeats() {
-        fetch('/pilot_queue/api/heats')
+        fetch('/q/api/heats')
         .then(function(r) { return r.json(); })
         .then(function(data) {
             heatsData = data.heats;

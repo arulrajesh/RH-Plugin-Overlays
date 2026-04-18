@@ -24,7 +24,6 @@
     <script type="text/javascript" src="/static/jquery-3.6.4/jquery-3.6.4.min.js"></script>
     <script type="text/javascript" src="/static/articulate/articulate.min.js"></script>
     <script type="text/javascript" src="/static/socket.io-4.6.1/socket.io.min.js"></script>
-    <script type="text/javascript" src="/static/smoothie/smoothie.js"></script>
     <script type="text/javascript" src="/static/magnific-1.1.0/magnific-inline-min.js"></script>
     <script type="text/javascript" src="/static/svgasset.js"></script>
     <script type="text/javascript" src="/static/rotorhazard.js"></script>
@@ -94,12 +93,7 @@
 
         socket.on('language', default_handler['language']);
 
-        // set up node local store
-        for (i = 0; i < {{ num_nodes }}; i++) {
-            rotorhazard.nodes[i] = new nodeModel();
-        }
-
-        socket.on('race_scheduled', default_handler['race_scheduled']);
+socket.on('race_scheduled', default_handler['race_scheduled']);
 
         socket.on('pilot_data', function (msg) {
             rotorhazard.event.pilot_attributes = msg.attributes;
@@ -125,19 +119,44 @@
                 }
             }
 
-            // Rebuild display if we have leaderboard data
+            // Update heat name immediately when heat is selected
+            if (msg.displayname) {
+                $('.curr_heat_title').html(msg.displayname);
+            }
+
+            // Build pilot list directly from heatNodes so the overlay updates
+            // the moment a heat is selected, even before any race is staged.
+            if (msg.heatNodes) {
+                var lbFromHeat = [];
+                var nodeKeys = Object.keys(msg.heatNodes).sort(function(a, b) { return parseInt(a) - parseInt(b); });
+                for (var k = 0; k < nodeKeys.length; k++) {
+                    var idx = nodeKeys[k];
+                    var hn = msg.heatNodes[idx];
+                    if (hn && hn.pilot_id) {
+                        var callsign = '';
+                        if (ddr_pilot_data) {
+                            var pd = ddr_pilot_data.find(function(p) { return p.pilot_id === hn.pilot_id; });
+                            if (pd) callsign = pd.callsign || '';
+                        }
+                        lbFromHeat.push({ node: parseInt(idx), pilot_id: hn.pilot_id, callsign: callsign });
+                    }
+                }
+                if (lbFromHeat.length > 0) {
+                    var heatMeta = { team_racing_mode: false, start_behavior: 0, consecutives_count: 3, primary_leaderboard: 'by_race_time' };
+                    ddr_last_leaderboard_data = { leaderboard: lbFromHeat, meta: heatMeta };
+                    $('#nextup_pilot_box').empty();
+                    DDR_Settings.ready(function() {
+                        build_nextup(lbFromHeat, 'current', heatMeta, ddr_pilot_data, ddr_frequency_data, false, ddr_heat_colors);
+                    });
+                    return;
+                }
+            }
+
+            // Fallback: rebuild from last leaderboard with updated colors
             if (ddr_last_leaderboard_data) {
                 $('#nextup_pilot_box').empty();
                 DDR_Settings.ready(function() {
-                    build_nextup(
-                        ddr_last_leaderboard_data.leaderboard,
-                        'current',
-                        ddr_last_leaderboard_data.meta,
-                        ddr_pilot_data,
-                        ddr_frequency_data,
-                        false, // show_position
-                        ddr_heat_colors // Pass heat colors
-                    );
+                    build_nextup(ddr_last_leaderboard_data.leaderboard, 'current', ddr_last_leaderboard_data.meta, ddr_pilot_data, ddr_frequency_data, false, ddr_heat_colors);
                 });
             }
         });
@@ -214,29 +233,7 @@
             <span class="curr_event_name">{{ getOption('eventName') }}</span>
         </div>
 
-        <div id="nextup_pilot_box">
-
-            <div class="nextup_pilot">
-
-                <div class="nextup_pilot_avatar">
-                    <div class="nextup_pilot_avatar_mask">
-                        <img src="/ddr_overlays/static/imgs/no_avatar.png" alt="Avatar">
-                    </div>
-                </div>
-
-                <div class="nextup_pilot_flag">
-                    <div class="nextup_pilot_flag_mask">
-                        <img src="/ddr_overlays/static/imgs/flags/nl.jpg">
-                    </div>
-                </div>
-
-                <div class="nextup_pilot_name">
-                    MCK FPV
-                </div>
-
-            </div>
-
-        </div>
+        <div id="nextup_pilot_box"></div>
 
     </div>
 

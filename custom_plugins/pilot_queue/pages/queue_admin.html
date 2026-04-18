@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Pilot Queue - Admin</title>
-    <link rel="stylesheet" href="/pilot_queue/static/css/queue.css">
+    <link rel="stylesheet" href="/q/static/css/queue.css">
     <style>
         /* Replace modal */
         .replace-modal-overlay {
@@ -42,7 +42,7 @@
 <div class="admin-header">
     <h1>Pilot Queue - Admin</h1>
     <p>Configure and manage the pilot self-service queue</p>
-    <a href="/pilot_queue/" target="_blank" class="kiosk-link">Open Kiosk Page</a>
+    <a href="/q/" target="_blank" class="kiosk-link">Open Kiosk Page</a>
 </div>
 
 <div id="admin_message" class="admin-message"></div>
@@ -144,7 +144,7 @@
     }
 
     function loadConfig() {
-        fetch('/pilot_queue/api/config')
+        fetch('/q/api/config')
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 var cfg = data.config;
@@ -177,7 +177,7 @@
             auto_generate: document.getElementById('cfg_auto_generate').checked
         };
 
-        fetch('/pilot_queue/api/config', {
+        fetch('/q/api/config', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(cfg)
@@ -195,7 +195,7 @@
     }
 
     function generateHeat() {
-        fetch('/pilot_queue/api/generate', { method: 'POST' })
+        fetch('/q/api/generate', { method: 'POST' })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             showMessage(data.message, data.success ? 'success' : 'error');
@@ -206,7 +206,7 @@
     }
 
     function resetQueue() {
-        fetch('/pilot_queue/api/reset', { method: 'POST' })
+        fetch('/q/api/reset', { method: 'POST' })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             showMessage(data.message, data.success ? 'success' : 'error');
@@ -216,7 +216,7 @@
     }
 
     function removePilot(pilotId, slot) {
-        fetch('/pilot_queue/api/leave', {
+        fetch('/q/api/leave', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({pilot_id: pilotId, slot: slot})
@@ -363,14 +363,14 @@
 
         var url, body;
         if (replaceState.mode === 'heat') {
-            url = '/pilot_queue/api/replace_in_heat';
+            url = '/q/api/replace_in_heat';
             body = {
                 heat_id: replaceState.heatId,
                 old_pilot_id: replaceState.oldPilotId,
                 new_pilot_id: newPilotId
             };
         } else {
-            url = '/pilot_queue/api/replace';
+            url = '/q/api/replace';
             body = {
                 old_pilot_id: replaceState.oldPilotId,
                 new_pilot_id: newPilotId,
@@ -405,7 +405,7 @@
     // POLLING & RENDER
     // ============================================
     function pollStatus() {
-        fetch('/pilot_queue/api/status')
+        fetch('/q/api/status')
         .then(function(r) { return r.json(); })
         .then(function(data) {
             lastStatusData = data;
@@ -475,7 +475,7 @@
     // HEATS POLLING & RENDER
     // ============================================
     function pollHeats() {
-        fetch('/pilot_queue/api/heats')
+        fetch('/q/api/heats')
         .then(function(r) { return r.json(); })
         .then(function(data) {
             lastHeatsData = data.heats;

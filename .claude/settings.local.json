@@ -9,7 +9,13 @@
       "Bash(where:*)",
       "Bash(dir:*)",
       "Bash(findstr:*)",
-      "Bash(python -c:*)"
+      "Bash(python -c:*)",
+      "WebFetch(domain:rotorhazard.github.io)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(git -C \"c:/Users/Arul/Documents/RH-Pilot-Queue\" init -b main)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(gh auth status:*)"
     ]
   }
 }

@@ -15,6 +15,8 @@ qm = QueueManager()
 
 def initialize(rhapi):
     qm.load()
+    # Clean up any heats that were deleted while the plugin wasn't running
+    qm.reconcile_heats(rhapi)
     logger.info("[PilotQueue] Plugin initialized")
 
     bp = Blueprint(
@@ -22,14 +24,14 @@ def initialize(rhapi):
         __name__,
         template_folder='pages',
         static_folder='static',
-        static_url_path='/pilot_queue/static'
+        static_url_path='/q/static'
     )
 
     # ============================================
     # PAGES
     # ============================================
 
-    @bp.route('/pilot_queue/')
+    @bp.route('/q/')
     def kiosk_page():
         return templating.render_template(
             'queue_kiosk.html',
@@ -38,7 +40,7 @@ def initialize(rhapi):
             __=rhapi.__
         )
 
-    @bp.route('/pilot_queue/admin')
+    @bp.route('/q/admin')
     def admin_page():
         return templating.render_template(
             'queue_admin.html',
@@ -51,7 +53,7 @@ def initialize(rhapi):
     # API: STATUS
     # ============================================
 
-    @bp.route('/pilot_queue/api/status', methods=['GET'])
+    @bp.route('/q/api/status', methods=['GET'])
     def api_status():
         """Get full queue state with pilot eligibility."""
         status = qm.get_status(rhapi)
@@ -61,7 +63,7 @@ def initialize(rhapi):
     # API: JOIN / LEAVE
     # ============================================
 
-    @bp.route('/pilot_queue/api/join', methods=['POST'])
+    @bp.route('/q/api/join', methods=['POST'])
     def api_join():
         """Pilot joins a slot queue. Body: {pilot_id: int, slot: int}"""
         data = request.get_json()
@@ -82,7 +84,7 @@ def initialize(rhapi):
 
         return jsonify({'success': success, 'message': message, 'heat_id': heat_id})
 
-    @bp.route('/pilot_queue/api/leave', methods=['POST'])
+    @bp.route('/q/api/leave', methods=['POST'])
     def api_leave():
         """Pilot leaves a slot queue. Body: {pilot_id: int, slot: int}"""
         data = request.get_json()
@@ -95,7 +97,7 @@ def initialize(rhapi):
         success, message = qm.leave(pilot_id, slot)
         return jsonify({'success': success, 'message': message})
 
-    @bp.route('/pilot_queue/api/replace', methods=['POST'])
+    @bp.route('/q/api/replace', methods=['POST'])
     def api_replace():
         """Admin: replace a pilot in a slot. Body: {old_pilot_id: int, new_pilot_id: int, slot: int}"""
         data = request.get_json()
@@ -109,7 +111,7 @@ def initialize(rhapi):
         success, message = qm.replace(old_pilot_id, new_pilot_id, slot)
         return jsonify({'success': success, 'message': message})
 
-    @bp.route('/pilot_queue/api/replace_in_heat', methods=['POST'])
+    @bp.route('/q/api/replace_in_heat', methods=['POST'])
     def api_replace_in_heat():
         """Admin: replace a pilot in a generated heat. Body: {heat_id: int, old_pilot_id: int, new_pilot_id: int}"""
         data = request.get_json()
@@ -127,7 +129,7 @@ def initialize(rhapi):
     # API: HEATS INFO
     # ============================================
 
-    @bp.route('/pilot_queue/api/heats', methods=['GET'])
+    @bp.route('/q/api/heats', methods=['GET'])
     def api_heats():
         """Get details of all generated heats with pilots and results."""
         heats = qm.get_heats_info(rhapi)
@@ -137,7 +139,7 @@ def initialize(rhapi):
     # API: HEAT GENERATION
     # ============================================
 
-    @bp.route('/pilot_queue/api/generate', methods=['POST'])
+    @bp.route('/q/api/generate', methods=['POST'])
     def api_generate():
         """Admin: manually generate next heat from queue."""
         success, message, heat_id = qm.generate_heat(rhapi)
@@ -147,7 +149,7 @@ def initialize(rhapi):
     # API: CONFIG
     # ============================================
 
-    @bp.route('/pilot_queue/api/config', methods=['GET'])
+    @bp.route('/q/api/config', methods=['GET'])
     def api_get_config():
         """Get queue configuration."""
         # Include available classes for the admin dropdown
@@ -163,7 +165,7 @@ def initialize(rhapi):
             'classes': classes
         })
 
-    @bp.route('/pilot_queue/api/config', methods=['POST'])
+    @bp.route('/q/api/config', methods=['POST'])
     def api_update_config():
         """Update queue configuration. Body: config object."""
         data = request.get_json()
@@ -191,7 +193,7 @@ def initialize(rhapi):
     # API: RESET
     # ============================================
 
-    @bp.route('/pilot_queue/api/reset', methods=['POST'])
+    @bp.route('/q/api/reset', methods=['POST'])
     def api_reset():
         """Clear all queues and pilot stats."""
         qm.reset()
@@ -210,7 +212,25 @@ def initialize(rhapi):
         except Exception as e:
             logger.error(f"[PilotQueue] Error in on_laps_save: {e}")
 
+    def on_heat_delete(args):
+        """Called when a heat is deleted in RotorHazard. Remove it from our tracking."""
+        try:
+            heat_id = args.get('heat_id') if args else None
+            if heat_id:
+                qm.remove_heat(int(heat_id))
+        except Exception as e:
+            logger.error(f"[PilotQueue] Error in on_heat_delete: {e}")
+
+    def on_race_stage(args):
+        """Called when the race timer is staged. Reconcile any externally deleted heats."""
+        try:
+            qm.reconcile_heats(rhapi)
+        except Exception as e:
+            logger.error(f"[PilotQueue] Error in on_race_stage: {e}")
+
     rhapi.events.on(Evt.LAPS_SAVE, on_laps_save)
+    rhapi.events.on(Evt.HEAT_DELETE, on_heat_delete)
+    rhapi.events.on(Evt.RACE_STAGE, on_race_stage)
 
     # ============================================
     # REGISTER
